@@ -1,0 +1,8 @@
+[package]
+name = "test_fails_assert"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone: not part of the project workspace.
+[workspace]

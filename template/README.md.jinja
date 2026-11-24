@@ -1,0 +1,86 @@
+# {{ project_name }}
+
+{{ description or "<One sentence: what this project is and who it is for.>" }}
+
+**Stage:** day 0, no code yet. Stack: not decided ([decision record](docs/decisions/0002-choose-the-stack.md)).
+
+## Contents
+
+- [About](#about)
+- [Getting started](#getting-started)
+- [How we work](#how-we-work)
+- [Checks](#checks)
+- [How AI is used](#how-ai-is-used)
+- [Releases](#releases)
+
+## About
+
+<What it does, main features, where it runs. Filled in from [the product vision](docs/product/vision.md).>
+
+## Getting started
+
+Requirements: Git, Bash (Windows: Git Bash or WSL), [lefthook](https://lefthook.dev),
+[uv](https://docs.astral.sh/uv/){% if use_speckit %} (for Spec Kit){% endif %}; Docker optional.
+Runtime requirements follow once the stack is decided.
+
+```bash
+git clone <repository url>
+cd {{ project_slug }}
+scripts/setup          # git hooks, pinned security scanners, rule sets
+scripts/check all      # what CI runs
+```
+
+## How we work
+
+| Document | What |
+|---|---|
+| [CONSTITUTION.md](CONSTITUTION.md) | The principles; every plan is checked against them |
+| [AGENTS.md](AGENTS.md) | How we work: work types, AI levels, rules for people and AI tools |
+| {% if tracker == 'todo' %}[TODO.md](TODO.md){% else %}Tracker{% endif %} | Issues `{{ issue_key }}-<n>` |
+| [docs/process/workflow.md](docs/process/workflow.md) | Idea → decision → feature / bug / release |
+| [docs/decisions/](docs/decisions/) | Decision records |
+
+Commits are [Conventional Commits](https://www.conventionalcommits.org/) with the issue as scope:
+`feat({{ issue_key }}-12): add fixture groups`.
+
+## Checks
+
+Every check runs through `scripts/check`: the git hooks, the AI agent and CI call the same stages.
+
+| Command | What |
+|---|---|
+| `scripts/check fast` | constitution in sync, format, lint, typecheck, secrets in staged files |
+| `scripts/check test` | tests |
+| `scripts/check research` | research notes dated and verified; decisions cite evidence (in `fast`) |
+| `scripts/check stack-layer` | after the first code: every playbook command in `check.config` decided |
+| `scripts/check licenses` | forbidden and restricted licences (trivy) |
+| `scripts/check docs` | markdownlint and relative links |
+| `scripts/verify-package` | does a package exist, its licence and last release (registry API) |
+| `scripts/check secrets` | secrets in the full history (gitleaks) |
+| `scripts/check deps` | fixable high/critical vulnerabilities in production dependencies (trivy) |
+| `scripts/check sast` | static security analysis (opengrep) |
+| `scripts/check config` | Dockerfile / IaC misconfiguration (trivy) |
+| `scripts/check canary` | the scanners still find the planted bugs in `tests/security-canary/` |
+| `scripts/check all` | all of the above |
+
+## How AI is used
+
+AI tools (mainly Claude Code{% if use_speckit %}, with [GitHub Spec Kit](https://github.github.com/spec-kit/) for specs, idea assessment and bug analysis{% endif %}) work here at a level that depends on the work:
+
+- **Features ({{ feature_level }}):** {% if feature_level == 'ai-assist' %}AI helps write specs, plans, code and tests on request. A person reviews and edits every change and makes every commit.{% else %}an agent specs, builds and commits on its own branch and opens a pull request; a person approves the plan and merges.{% endif %}
+- **Bug fixes ({{ bug_level }}):** {% if bug_level == 'agentic' %}an agent finds the cause, fixes it with a regression test on its own branch and opens a pull request; a person reviews and merges. Bugs touching design, security, data or hardware safety go to a person.{% else %}AI helps find and fix; a person commits.{% endif %}
+- **Releases ({{ release_level }}):** {% if release_level == 'agentic' %}an agent computes the version from the commits and prepares the changelog on a release branch; a person merges and tags.{% else %}a person releases, with AI help for the changelog.{% endif %}
+
+Agent commits carry a `Co-Authored-By` trailer and a session link; commits made by a person after AI
+help are authored by that person. Pull requests state the AI use. The rules every AI tool follows
+are in [AGENTS.md](AGENTS.md); the files that check and constrain them are listed in
+[`.guardrails`](.guardrails).
+
+## Releases
+
+Versions follow [Semantic Versioning](https://semver.org/), computed from the commit types
+(`scripts/next-version`). See [CHANGELOG.md](CHANGELOG.md).
+
+---
+Set up from [dev-standard](https://example.invalid/dev-standard) <!-- replace with the template's URL -->.
+Update with `copier update --trust`.

@@ -1,0 +1,5 @@
+# Node / NestJS / React
+opengrep:nestjs-user-input-to-dangerous-sink
+opengrep:weak-host-allowlist-endswith
+opengrep:detect-child-process
+opengrep:react-dangerouslysetinnerhtml

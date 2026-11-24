@@ -1,0 +1,16 @@
+# Prettier checks source and config, not the docs and generated tooling.
+tests/*-canary/
+spikes/
+.specify/
+.claude/
+.github/
+.opengrep/
+docs/
+specs/
+*.md
+.copier-answers.yml
+lefthook.yml
+coverage/
+dist/
+.tools/
+.markdownlint-cli2.jsonc

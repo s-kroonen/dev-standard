@@ -1,0 +1,37 @@
+# Product vision — {{ project_name }}
+
+> {{ description or "<one sentence: what it is and for whom>" }}
+
+{% if use_speckit -%}
+The problem and the concept are written once, in the idea assessment
+(`.specify/assessments/<slug>/`: problem, concept, decision). This page is the one-page summary
+that links to it; don't copy details here, they would drift.
+
+## Problem
+
+<One paragraph, then a link to `.specify/assessments/<slug>/problem.md`.>
+{%- else -%}
+## Problem
+
+<Who has which problem today? How do they solve it now, and what's wrong with that?>
+{%- endif %}
+
+## Users
+
+| User | Goal | Context (device, place, skill) |
+|---|---|---|
+| <who> | <what they want to get done> | <where and how they use it> |
+
+## Scope
+
+- **In (first version):** <the smallest useful thing>
+- **Later:** <next>
+- **Out:** <explicitly not doing>
+
+## Success
+
+<How we know it works: measurable where possible.>
+
+## Constraints and risks
+
+<Hardware, safety, legal, budget, time, dependencies.>

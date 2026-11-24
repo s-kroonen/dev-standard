@@ -1,0 +1,78 @@
+# Claude GitHub Action for the agentic work types (AGENTS.md section 2): bug fixes and releases.
+# Runs when someone with write access mentions @claude, labels an issue "agent", or starts it by
+# hand for a TODO.md item. It works on a claude/ branch and opens a PR; it never merges, and
+# checks.yml + the branch rules decide what gets in. One run at a time (queue).
+# Needs secret ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN). TO VERIFY on the first real run:
+# that .claude/settings.json hooks (git-policy, protect-paths) load in the Action.
+name: claude-agent
+
+on:
+  # Comments from anyone trigger it; the job's `if` lets only OWNER/MEMBER/COLLABORATOR through.
+  issue_comment: # zizmor: ignore[dangerous-triggers]
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "TODO.md item, e.g. APP-12"
+        required: true
+      work:
+        description: "Work type"
+        type: choice
+        options: [fix, release]
+        default: fix
+
+concurrency:
+  group: claude-agent
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  agent:
+    # Only people with write access; labels and dispatch already need it.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && github.event.label.name == 'agent') ||
+      (contains(github.event.comment.body, '@claude') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: scripts/setup
+      - name: Prompt for a TODO.md item
+        id: todo
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ISSUE: ${{ inputs.issue }}
+          WORK: ${{ inputs.work }}
+        run: |
+          [[ "$ISSUE" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]] || { echo "::error::issue must look like KEY-12"; exit 1; }
+          {
+            echo "prompt<<EOF_PROMPT"
+            if [[ "$WORK" == release ]]; then echo "Prepare the next release with /release (AGENTS.md section 2)."
+            else echo "Fix bug $ISSUE from TODO.md: /speckit-bug-assess, then fix with a regression test. Escalate per AGENTS.md instead of fixing when the rules say so."; fi
+            echo "Open a PR titled per AGENTS.md section 6. Never merge."
+            echo "EOF_PROMPT"
+          } >> "$GITHUB_OUTPUT"
+      - uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1.0.289
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ steps.todo.outputs.prompt }}
+          branch_prefix: "claude/"
+          claude_args: >-
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(scripts/check:*),Bash(scripts/next-version:*),Bash(scripts/verify-package:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh pr view:*)"

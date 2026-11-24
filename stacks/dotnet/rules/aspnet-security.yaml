@@ -1,0 +1,31 @@
+rules:
+  - id: aspnet-input-to-dangerous-sink
+    mode: taint
+    languages: [csharp]
+    severity: ERROR
+    message: Action parameter (request data) reaches '$SINK' without validation (command, path, SSRF, XSS).
+    metadata: { category: security, cwe: ["CWE-78", "CWE-22", "CWE-918", "CWE-79"] }
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              [$HTTP(...)]
+              public $RET $M(..., $TYPE $P, ...) { ... }
+          - metavariable-regex: { metavariable: $HTTP, regex: '^Http(Get|Post|Put|Delete|Patch)$' }
+          - pattern: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Process.Start(..., $SINK, ...)
+              - pattern: System.IO.File.ReadAllText($SINK)
+              - pattern: System.IO.File.OpenRead($SINK)
+              - pattern: (System.Net.Http.HttpClient $C).GetStringAsync($SINK)
+              - pattern: new System.Net.Http.HttpClient().GetStringAsync($SINK)
+              - pattern: Content($SINK, "text/html")
+  - id: csharp-weak-hash
+    languages: [csharp]
+    severity: WARNING
+    message: MD5/SHA-1 are broken for security use.
+    metadata: { category: security, cwe: ["CWE-327"] }
+    pattern-either:
+      - pattern: MD5.Create()
+      - pattern: SHA1.Create()

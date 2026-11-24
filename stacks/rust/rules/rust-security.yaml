@@ -1,0 +1,71 @@
+rules:
+  - id: rust-web-input-to-dangerous-sink
+    mode: taint
+    languages: [rust]
+    severity: ERROR
+    message: Request data (axum/actix extractor) reaches '$SINK' without validation (command, SQL, path, SSRF).
+    metadata: { category: security, cwe: ["CWE-78", "CWE-89", "CWE-22", "CWE-918"] }
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: "async fn $F(..., Query($Q): $T, ...) { ... }"
+              - pattern-inside: "async fn $F(..., Query($Q): $T, ...) -> $R { ... }"
+              - pattern-inside: "async fn $F(..., Path($Q): $T, ...) -> $R { ... }"
+              - pattern-inside: "async fn $F(..., Json($Q): $T, ...) -> $R { ... }"
+              - pattern-inside: "async fn $F(..., web::Query($Q): $T, ...) -> $R { ... }"
+          - pattern: $Q
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: "Command::new(...).arg($SINK)"
+              - pattern: "Command::new($SINK)"
+              - pattern: "sqlx::query($SINK)"
+              - pattern: "std::fs::read_to_string($SINK)"
+              - pattern: "std::fs::read($SINK)"
+              - pattern: "std::fs::File::open($SINK)"
+              - pattern: "reqwest::get($SINK)"
+  - id: rust-weak-hash
+    languages: [rust]
+    severity: WARNING
+    message: MD5/SHA-1 are broken for security use; use SHA-256 or a password hash (argon2).
+    metadata: { category: security, cwe: ["CWE-327"] }
+    pattern-either:
+      - pattern: md5::compute(...)
+      - pattern: sha1::Sha1::new()
+  - id: rust-shell-with-formatted-command
+    languages: [rust]
+    severity: ERROR
+    message: A shell runs a command built with format!; any outside value in it is command injection. Pass arguments separately with .arg(), never through "sh -c".
+    metadata: { category: security, cwe: ["CWE-78"] }
+    patterns:
+      - pattern-either:
+          - pattern: Command::new("sh").arg("-c").arg(format!(...))
+          - pattern: Command::new("bash").arg("-c").arg(format!(...))
+          - pattern: Command::new("cmd").arg("/C").arg(format!(...))
+  - id: rust-sql-built-with-format
+    languages: [rust]
+    severity: ERROR
+    message: SQL built with format!; use bind parameters (sqlx::query("... $1").bind(value)).
+    metadata: { category: security, cwe: ["CWE-89"] }
+    pattern-either:
+      - pattern: sqlx::query(&format!(...))
+      - pattern: sqlx::query(format!(...).as_str())
+      - pattern: $CONN.execute(&format!(...), ...)
+  - id: rust-fs-path-built-with-format
+    languages: [rust]
+    severity: WARNING
+    message: File path built with format!; if any part comes from outside, canonicalize and check it stays inside the allowed directory.
+    metadata: { category: security, cwe: ["CWE-22"] }
+    pattern-either:
+      - pattern: std::fs::read_to_string(format!(...))
+      - pattern: std::fs::read(format!(...))
+      - pattern: std::fs::File::open(format!(...))
+      - pattern: std::fs::write(format!(...), ...)
+  - id: rust-tls-verification-disabled
+    languages: [rust]
+    severity: ERROR
+    message: TLS certificate checks are disabled.
+    metadata: { category: security, cwe: ["CWE-295"] }
+    pattern-either:
+      - pattern: $B.danger_accept_invalid_certs(true)
+      - pattern: $B.danger_accept_invalid_hostnames(true)

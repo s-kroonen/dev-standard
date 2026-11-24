@@ -1,0 +1,42 @@
+# One "tool:rule-id" per line. scripts/check canary fails when one is not detected.
+# Generic (any stack)
+gitleaks:aws-access-token
+gitleaks:stripe-access-token
+gitleaks:url-credentials
+gitleaks:discord-webhook-url
+gitleaks:typed-secret-constant
+trivy:DS-0002
+trivy:DS-0031
+opengrep:compose-privileged-service
+opengrep:compose-docker-socket-mount
+{%- if stack == 'python' %}
+# Python (FastAPI / Flask)
+opengrep:fastapi-input-to-dangerous-sink
+opengrep:subprocess-shell-true
+opengrep:eval-detected
+opengrep:avoid-pickle
+opengrep:insecure-hash-algorithm-md5
+{%- elif stack == 'node' %}
+# Node / TypeScript (Express, NestJS, React)
+opengrep:express-input-to-outgoing-request
+opengrep:js-unsafe-deserialize
+opengrep:js-weak-hash
+opengrep:detect-child-process
+opengrep:nestjs-user-input-to-dangerous-sink
+opengrep:weak-host-allowlist-endswith
+opengrep:react-dangerouslysetinnerhtml
+{%- elif stack == 'rust' %}
+# Rust (axum)
+opengrep:rust-web-input-to-dangerous-sink
+opengrep:rust-shell-with-formatted-command
+opengrep:rust-sql-built-with-format
+opengrep:rust-fs-path-built-with-format
+opengrep:rust-weak-hash
+opengrep:rust-tls-verification-disabled
+{%- elif stack == 'dotnet' %}
+# C# / ASP.NET
+opengrep:aspnet-input-to-dangerous-sink
+opengrep:csharp-weak-hash
+opengrep:csharp-sqli
+opengrep:insecure-binaryformatter-deserialization
+{%- endif %}

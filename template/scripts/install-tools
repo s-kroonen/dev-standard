@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#
+# Installs the pinned security tools into .tools/bin (git-ignored), checksum-verified, for Linux
+# x86_64 (CI runners, dev containers, WSL). On macOS use Homebrew (gitleaks, trivy, osv-scanner,
+# opengrep, lefthook) or Docker; on Windows `winget install evilmartians.lefthook`; scripts/check falls back to the pinned container images.
+#
+# Versions and checksums live in check.config. Bump them by hand (release notes, new checksum);
+# Dependabot (.github/dependabot.yml) covers actions and packages, not these.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+source ./check.config
+
+[[ "$(uname -s)-$(uname -m)" == "Linux-x86_64" ]] || { echo "Linux x86_64 only; use Homebrew or Docker here." >&2; exit 1; }
+bin=.tools/bin
+dl="$(mktemp -d)"
+trap 'rm -rf "$dl"' EXIT
+mkdir -p "$bin"
+
+fetch() { # url sha256 output
+    curl -fsSL "$1" -o "$3"
+    echo "$2  $3" | sha256sum -c --quiet - || { echo "Checksum mismatch for $1" >&2; exit 1; }
+}
+
+fetch "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+      "$GITLEAKS_SHA256" "$dl/gitleaks.tgz"
+tar -xzf "$dl/gitleaks.tgz" -C "$bin" gitleaks
+
+fetch "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+      "$TRIVY_SHA256" "$dl/trivy.tgz"
+tar -xzf "$dl/trivy.tgz" -C "$bin" trivy
+
+fetch "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
+      "$OSV_SHA256" "$bin/osv-scanner"
+
+fetch "https://github.com/opengrep/opengrep/releases/download/v${OPENGREP_VERSION}/opengrep_linux_x86" \
+      "$OPENGREP_SHA256" "$bin/opengrep"
+
+fetch "https://github.com/evilmartians/lefthook/releases/download/v${LEFTHOOK_VERSION}/lefthook_${LEFTHOOK_VERSION}_Linux_x86_64.gz" \
+      "$LEFTHOOK_SHA256" "$dl/lefthook.gz"
+gunzip -c "$dl/lefthook.gz" > "$bin/lefthook"
+
+chmod +x "$bin"/*
+for t in gitleaks trivy osv-scanner opengrep lefthook; do printf '%-12s %s\n' "$t" "$("$bin/$t" --version 2>&1 | head -n 1)"; done
+echo "Installed in $bin (scripts/check adds it to PATH)."

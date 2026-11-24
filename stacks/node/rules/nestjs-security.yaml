@@ -1,0 +1,48 @@
+# Custom opengrep rules for NestJS. The open rule set models Express (req.query) and misses
+# NestJS decorator parameters, so request data reaching a dangerous sink went unseen.
+# Tested 2026-11-19 on a canary file (all 6 injection patterns) and on a production NestJS API (found a real SSRF).
+# Vendor into .opengrep/rules/custom/ and add that dir to OPENGREP_RULES.
+rules:
+  - id: nestjs-user-input-to-dangerous-sink
+    mode: taint
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Request data from a NestJS route parameter (@Query/@Param/@Body/@Headers) reaches '$SINK'
+      without validation. Risk: SSRF, command/code injection, path traversal, NoSQL operator
+      injection or reflected XSS, depending on the sink.
+    metadata:
+      category: security
+      cwe: ["CWE-918", "CWE-78", "CWE-94", "CWE-22", "CWE-943", "CWE-79"]
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: "function $M(..., @Query(...) $P, ...) { ... }"
+              - pattern-inside: "function $M(..., @Param(...) $P, ...) { ... }"
+              - pattern-inside: "function $M(..., @Body(...) $P, ...) { ... }"
+              - pattern-inside: "function $M(..., @Headers(...) $P, ...) { ... }"
+          - pattern: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($SINK, ...)
+              - pattern: axios.$VERB($SINK, ...)
+              - pattern: exec($SINK, ...)
+              - pattern: execSync($SINK, ...)
+              - pattern: eval($SINK)
+              - pattern: fs.readFileSync($SINK, ...)
+              - pattern: fs.createReadStream($SINK, ...)
+              - pattern: $RES.send($SINK)
+              - pattern: '$MODEL.find({..., $where: $SINK, ...})'
+  - id: weak-host-allowlist-endswith
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Host allowlist with endsWith('$H'): 'evil$H' also matches. Compare the hostname exactly, or
+      check for '.' + domain, and also restrict the protocol to https and disable redirects.
+    metadata:
+      category: security
+      cwe: ["CWE-20", "CWE-918"]
+    pattern-either:
+      - pattern: $U.hostname.endsWith($H)
+      - pattern: $U.host.endsWith($H)

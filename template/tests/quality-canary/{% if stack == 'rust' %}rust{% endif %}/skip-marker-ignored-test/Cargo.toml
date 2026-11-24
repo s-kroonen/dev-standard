@@ -1,0 +1,8 @@
+[package]
+name = "skip_marker_ignored_test"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone: not part of the project workspace.
+[workspace]

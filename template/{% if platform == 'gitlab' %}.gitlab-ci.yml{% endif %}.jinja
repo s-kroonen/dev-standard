@@ -1,0 +1,205 @@
+# Checks for GitLab (Free tier): the same scripts/check stages as .github/workflows/checks.yml.
+#
+# Best: keep this file in a central templates project and point each project at it
+# (Settings > CI/CD > General pipelines > CI/CD configuration file: ".gitlab-ci.yml@<group>/ci-templates"),
+# so a merge request can't edit the checks it is checked by.
+# Turn on: protected branches (main, dev: push "No one"), "Pipelines must succeed",
+# "All threads must be resolved". Approvals and Code Owner approval need Premium.
+
+variables:
+  CHECK_IMAGE: debian:bookworm-slim   # day 0: no stack; set the toolchain image with the stack layer
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
+
+stages: [check, image, report, release]
+
+default:
+  image: $CHECK_IMAGE
+
+.tools:
+  before_script:
+    - command -v curl git >/dev/null || (apt-get update -qq && apt-get install -y -qq curl git >/dev/null)
+    - scripts/install-tools
+
+.toolchain:
+  stage: check
+  before_script:
+    - command -v curl git jq >/dev/null || (apt-get update -qq && apt-get install -y -qq curl git jq ca-certificates >/dev/null)
+    - 'source check.config && { [ "$INSTALL_CMD" = none ] || bash -c "$INSTALL_CMD"; }'
+
+fast:
+  extends: .toolchain
+  script:
+    - scripts/install-tools
+    - scripts/check fast
+
+test:
+  extends: .toolchain
+  variables: { GIT_DEPTH: "0" }
+  script:
+    - scripts/check test
+    - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-dev}" || true
+    - scripts/check coverage "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-dev}"
+    - scripts/check safety
+
+quality-canary:
+  extends: .toolchain
+  script: [scripts/check quality-canary, scripts/check hooks]
+
+# Deleted tests, new skip markers, fewer assertions (label "test-change"); a fix without a regression
+# test ("no-regression-test"); dependencies not named in a plan ("new-dependency"); numbered TODO items
+# from agent branches. Labels are set by a maintainer.
+test-integrity:
+  stage: check
+  variables: { GIT_DEPTH: "0" }
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - if echo "$CI_MERGE_REQUEST_LABELS" | grep -q test-change; then export ALLOW_TEST_CHANGES=1; fi
+    - scripts/check test-integrity "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - if echo "$CI_MERGE_REQUEST_LABELS" | grep -q no-regression-test; then export ALLOW_NO_TEST=1; fi
+    - if echo "$CI_MERGE_REQUEST_LABELS" | grep -q new-dependency; then export ALLOW_NEW_DEPS=1; fi
+    - scripts/check regression-test "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - scripts/check new-deps "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - scripts/check todo-ids "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - scripts/check proof "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - scripts/check scope "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+
+# docs/process/stack-layer.md: every variable decided once code exists, then each command.
+# "none" and not-yet-set commands are skipped, so day 0 stays green. The weekly schedule fuzzes longer.
+stack-layer:
+  extends: .toolchain
+  variables: { GIT_DEPTH: "0" }
+  parallel:
+    matrix:
+      - STAGE: [stack-layer, architecture, complexity, perf, e2e, contract, security-native, fuzz, dast]
+  script:
+    - export FUZZ_SECONDS="$([ "$CI_PIPELINE_SOURCE" = schedule ] && echo 600 || echo 30)"
+    - scripts/install-tools
+    - scripts/check $STAGE
+
+licenses:
+  extends: .toolchain
+  script:
+    - scripts/install-tools
+    - scripts/check licenses
+
+# markdownlint-cli2 (pinned in check.config) needs Node; relative links need nothing.
+docs:
+  stage: check
+  image: node:22-bookworm-slim
+  before_script:
+    - command -v git >/dev/null || (apt-get update -qq && apt-get install -y -qq git >/dev/null)
+  script: [scripts/check docs]
+
+# Squash commits take the MR title: it must be a Conventional Commit with the issue key.
+mr-rules:
+  stage: check
+  variables: { GIT_DEPTH: "0" }
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - scripts/check pr-title "$CI_MERGE_REQUEST_TITLE"
+
+build:
+  extends: .toolchain
+  script: [scripts/check build]
+
+security:
+  stage: check
+  extends: .tools
+  variables: { GIT_DEPTH: "0" }
+  parallel:
+    matrix:
+      - STAGE: [secrets, deps, sast, config, canary]
+  script: [scripts/check $STAGE]
+
+image:
+  stage: image
+  image: docker:27
+  services: [docker:27-dind]       # needs a runner that allows privileged (dind) jobs
+  needs: [fast, test]
+  rules:
+    - exists: [Dockerfile, docker/Dockerfile]
+  before_script:
+    - apk add --no-cache bash git curl >/dev/null
+  script:
+    - docker build -t "check/image:$CI_COMMIT_SHA" -f "${DOCKERFILE:-Dockerfile}" .
+    - scripts/check image "check/image:$CI_COMMIT_SHA"
+
+pr-size:
+  stage: check
+  variables: { GIT_DEPTH: "0" }
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^(fix|release|claude)\/|^ccr-/ && $CI_MERGE_REQUEST_LABELS !~ /large-change/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /(^|,)agent(,|$)/ && $CI_MERGE_REQUEST_LABELS !~ /large-change/
+  script:
+    - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - scripts/check pr-size "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+
+# Guardrail files in a merge request: fail unless a maintainer set the label "guardrail-change".
+# The list is read from the target branch, not from the MR.
+guardrails:
+  stage: check
+  variables: { GIT_DEPTH: "0" }
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - git show "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME:.guardrails" | grep -vE '^[[:space:]]*(#|$)' > /tmp/patterns
+    - hits="$(git diff --name-only "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"...HEAD | grep -Ef /tmp/patterns || true)"
+    - if [ -z "$hits" ]; then echo "No guardrail files changed."; exit 0; fi
+    - echo "Guardrail files changed:"; echo "$hits"
+    - echo "$CI_MERGE_REQUEST_LABELS" | grep -q guardrail-change || { echo "A maintainer reviews these and adds the label 'guardrail-change'."; exit 1; }
+
+deps-report:
+  stage: report
+  extends: .tools
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  script: [scripts/check deps-report]
+  allow_failure: true
+
+# A person pushes the tag v<x.y.z> on main (after merging release/v<x.y.z>): checks, SBOM, release
+# with the CHANGELOG section, and a merge request main -> dev (scripts/next-version needs it).
+# Needs a CI/CD variable RELEASE_BOT_TOKEN (project access token, scope api, role Developer or
+# higher; masked and protected) for the merge request; without it the job warns and skips that step.
+# Signing of the checksums (cosign keyless with a GitLab ID token) is not set up: STD follow-up.
+release:
+  stage: release
+  extends: .toolchain
+  variables: { GIT_DEPTH: "0" }
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
+  script:
+    - scripts/install-tools
+    - scripts/check all
+    - mkdir -p release
+    - trivy fs --quiet --format cyclonedx --output release/sbom.cdx.json .
+    - (cd release && sha256sum -- * > SHA256SUMS)
+    - v="${CI_COMMIT_TAG#v}"
+    - awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > notes.md
+    - '[ -s notes.md ] || { echo "No CHANGELOG.md section for $v (run /release before tagging)."; exit 1; }'
+    - |
+      curl -fsS --request POST --header "JOB-TOKEN: $CI_JOB_TOKEN" --header "Content-Type: application/json" \
+        --data "$(jq -n --arg tag "$CI_COMMIT_TAG" --rawfile notes notes.md --arg url "$CI_JOB_URL/artifacts/browse/release/" \
+          '{tag_name: $tag, name: $tag, description: $notes, assets: {links: [{name: "SBOM, checksums", url: $url}]}}')" \
+        "$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases"
+    - |
+      if [ -n "${RELEASE_BOT_TOKEN:-}" ]; then
+        curl -fsS --request POST --header "PRIVATE-TOKEN: $RELEASE_BOT_TOKEN" \
+          --data-urlencode "source_branch=main" --data-urlencode "target_branch=dev" \
+          --data-urlencode "title=chore(release): merge $CI_COMMIT_TAG back into dev" \
+          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests" || echo "Could not open the back-merge MR (maybe main is already in dev)."
+      else
+        echo "RELEASE_BOT_TOKEN is not set: open the merge request main -> dev by hand."
+      fi
+  artifacts:
+    paths: [release/]
+    expire_in: never

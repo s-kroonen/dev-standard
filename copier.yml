@@ -1,0 +1,118 @@
+# dev-standard: Copier template for a new project, day 0 (no code, no stack yet).
+#
+#   uvx --from copier copier copy --trust /path/or/url/to/dev-standard ./my-project
+#   uvx --from copier copier update --trust            # later: pull in a new version of the standard
+#
+# --trust is needed because the template runs tasks (Spec Kit init, chmod, constitution sync).
+
+_min_copier_version: "9.4"
+_subdirectory: template
+_answers_file: .copier-answers.yml
+_templates_suffix: .jinja
+
+project_name:
+  type: str
+  help: Project name (shown in README, AGENTS.md, constitution)
+  default: My Project
+
+project_slug:
+  type: str
+  help: Folder / repository name
+  default: "{{ project_name | lower | replace(' ', '-') }}"
+
+description:
+  type: str
+  help: One sentence about the project
+  default: ""
+
+issue_key:
+  type: str
+  help: Issue key used in branches and commit scopes (capitals), e.g. APP
+  validator: "{% if not (issue_key | regex_search('^[A-Z][A-Z0-9]{1,9}$')) %}Use 2-10 capitals/digits, starting with a letter{% endif %}"
+
+tracker:
+  type: str
+  help: Where issues live
+  choices:
+    Local TODO.md: todo
+    GitHub Issues: github
+    Jira: jira
+  default: todo
+
+feature_level:
+  type: str
+  help: AI level for feature work
+  choices: [ai-assist, agentic]
+  default: ai-assist
+
+bug_level:
+  type: str
+  help: AI level for bug fixes
+  choices: [ai-assist, agentic]
+  default: agentic
+
+release_level:
+  type: str
+  help: AI level for preparing releases (a person always merges and tags)
+  choices: [ai-assist, agentic]
+  default: agentic
+
+platform:
+  type: str
+  help: CI platform (none = decide later)
+  choices: [github, gitlab, none]
+  default: github
+
+stack:
+  type: str
+  help: Stack (day 0 = none; set it once docs/decisions/0002-choose-the-stack.md is accepted, via copier update --data stack=<name>)
+  choices: [none, python, node, rust, dotnet, flutter]
+  default: none
+
+safety_critical:
+  type: bool
+  help: Does the software drive physical things that can hurt people or property (lasers, motors, heaters)? Adds constitution VII and mandatory safety tests
+  default: false
+
+network_api:
+  type: bool
+  help: Does it expose a control API (HTTP, WebSocket, LAN)? Adds constitution VIII (secure control surface) and security requirements
+  default: false
+
+github_agent:
+  type: bool
+  help: Add the Claude GitHub Action workflow for agentic work types (bugs, releases)
+  default: false
+  when: "{{ platform == 'github' }}"
+
+use_speckit:
+  type: bool
+  help: Set up GitHub Spec Kit (spec-driven workflow, idea assessment, bug process) with the dev-standard preset
+  default: true
+
+speckit_version:
+  type: str
+  help: Spec Kit version to pin
+  default: "1.4.4"
+  when: "{{ use_speckit }}"
+
+owner:
+  type: str
+  help: Maintainer name or handle (CODEOWNERS, decision records)
+  default: maintainer
+
+_tasks:
+  - command: "[ -d .git ] || git init -q -b dev"
+    when: "{{ _copier_operation == 'copy' }}"
+  - command: chmod +x scripts/check scripts/setup scripts/install-tools scripts/update-rules scripts/sync-constitution scripts/next-version scripts/verify-package scripts/repo-settings .claude/hooks/protect-paths.sh .claude/hooks/git-policy.sh .claude/hooks/run-checks.sh .claude/hooks/format-file.sh
+  - command: grep -rl __TODAY__ . --exclude-dir=.git | xargs -r sed -i "s/__TODAY__/$(date +%F)/g"
+    when: "{{ _copier_operation == 'copy' }}"
+  - command: >-
+      uvx --from specify-cli=={{ speckit_version }} specify init --here --force --integration claude
+      --script sh --non-interactive --ignore-agent-tools --extension assess --extension bug
+    when: "{{ use_speckit and _copier_operation == 'copy' }}"
+  - command: uvx --from specify-cli=={{ speckit_version }} specify preset add --dev "{{ _copier_conf.src_path }}/speckit-preset"
+    when: "{{ use_speckit and _copier_operation == 'copy' }}"
+  - command: scripts/sync-constitution
+    when: "{{ use_speckit }}"
+  - command: scripts/update-rules

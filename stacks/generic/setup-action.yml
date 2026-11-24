@@ -1,0 +1,8 @@
+# Toolchain and dependencies for scripts/check (written by scripts/init for this stack).
+name: setup
+description: Toolchain and dependencies for scripts/check
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: echo "No toolchain for the generic stack; add the setup steps of your project here."

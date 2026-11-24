@@ -1,0 +1,29 @@
+{% if tracker == 'todo' -%}
+# TODO — {{ project_name }}
+
+The issue tracker for this project. Every change belongs to one item. Agents may add items
+(status `todo`) with the ID `{{ issue_key }}-?`; a person gives the number on `dev` (two branches
+can't take the same one; CI `todo-ids` checks it). Only a person changes an item to `done` or
+removes it.
+
+**Next free number: {{ issue_key }}-7**
+
+| ID | Type | Title | Status | Level | Time-box | Notes |
+|----|------|-------|--------|-------|----------|-------|
+| {{ issue_key }}-1 | chore | Set up the repository from dev-standard | done | ai-assist | | day 0 |
+| {{ issue_key }}-2 | chore | Write the product vision (`docs/product/vision.md`) | todo | ai-assist | | |
+| {{ issue_key }}-3 | chore | Assess the idea{% if use_speckit %} (`/speckit-assess-*`){% endif %} and research the options | todo | ai-assist | | before the stack |
+| {{ issue_key }}-4 | chore | Decide the stack (`docs/decisions/0002-choose-the-stack.md`) | todo | ai-assist | | then add the stack layer |
+| {{ issue_key }}-5 | chore | Add the stack layer (`docs/process/stack-layer.md`, skill `/stack-layer`) | todo | ai-assist | | after {{ issue_key }}-4 is accepted; again when the code grows |
+| {{ issue_key }}-6 | chore | Review the research after the first working build (playbook step 14) | todo | ai-assist | | update the ASRs, retrospective for a remake, new concerns, stale notes |
+
+- **Type**: feature, bug, release, chore, docs. **Status**: todo, doing, review, done, dropped.
+- **Time-box**: for research and spike items, how long they may take (`4h`, `2 days`); at the box the
+  work stops and hands over, or a person extends it on purpose.
+- **Level**: from the work type (AGENTS.md section 2); a bug can be set to `ai-assist` when escalated.
+- Branch: `<type>/{{ issue_key }}-<n>-<slug>`; commit scope: `{{ issue_key }}-<n>`.
+{%- else -%}
+# TODO
+
+Issues live in {% if tracker == 'github' %}GitHub Issues{% else %}Jira ({{ issue_key }}){% endif %}. This file only holds personal notes.
+{%- endif %}
