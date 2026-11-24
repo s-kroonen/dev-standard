@@ -16,7 +16,7 @@ scripts:
 $ARGUMENTS
 ```
 
-You **MUST** consider the user input before proceeding (if not empty).
+The user input **MUST** be considered before proceeding (if not empty).
 
 ## Scope Guard
 
@@ -26,8 +26,8 @@ and commands read the constitution at runtime and are not modified here.
 - Classify every part of the user input as either constitution content or a separate,
   non-governance intent.
 - If the input includes feature implementation, code generation, refactoring, building, or
-  deployment requests, you **MUST NOT** execute them. Extract them as deferred intents instead.
-- You **MUST NOT** create, modify, or delete application source files, feature routes,
+  deployment requests, they **MUST NOT** be executed. Extract them as deferred intents instead.
+- The command **MUST NOT** create, modify, or delete application source files, feature routes,
   components, tests, deployment files, or other artifacts unrelated to the constitution
   workflow.
 - If it is unclear whether an instruction is constitution content, ask for clarification before
@@ -74,7 +74,7 @@ and commands read the constitution at runtime and are not modified here.
 
 ## Outline
 
-You are updating the project constitution at `CONSTITUTION.md` (repository root; the source of truth, also used without Spec Kit). The active
+This command updates the project constitution at `CONSTITUTION.md` (repository root; the source of truth, also used without Spec Kit). The active
 constitution scaffold is resolved at command time from `constitution-template` through the Spec Kit
 preset/template resolution stack.
 
@@ -86,12 +86,12 @@ Follow this execution flow:
    - If it fails, stop and report the resolution error; do not continue with only one contributing
      template layer.
    - If `CONSTITUTION.md` exists, load it as the source of current project-specific
-     values and amendments. Preserve information that is still applicable when applying the newly
-     resolved scaffold.
+     values and amendments. Preserve information that is still applicable when applying the resolved
+     scaffold.
    - If it does not exist, use the resolved template as the initial document.
    - Do not write back to any versioned template layer.
    - Identify every placeholder token of the form `[ALL_CAPS_IDENTIFIER]`.
-   **IMPORTANT**: The user might require less or more principles than the ones used in the template. If a number is specified, respect that - follow the general template. You will update the doc accordingly.
+   **IMPORTANT**: The user might require less or more principles than the ones used in the template. If a number is specified, respect that - follow the general template. The doc is updated accordingly.
 
 2. Collect/derive values for placeholders:
    - If user input (conversation) supplies a value, use it.

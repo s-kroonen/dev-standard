@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#
+# dev-standard follows its own standard: this runs the template's script of the same name with the
+# settings of this repository (check.config, ISSUE_KEY=STD).
+exec "$(dirname "${BASH_SOURCE[0]}")/../template/scripts/$(basename "${BASH_SOURCE[0]}")" "$@"

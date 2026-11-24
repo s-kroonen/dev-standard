@@ -4,7 +4,7 @@ Gaps found in the reviews, to tighten after all four reviews are done. One row p
 Reviews: 1 quality gates, 2 security, 3 research steps, 4 building flow (review notes are kept
 outside this repository).
 
-**Next free number: STD-81**
+**Next free number: STD-95**
 
 Severity: **H** high, **M** medium, **L** low. Status: todo, doing, done, partly (what is left is in the row and in a new item), dropped (with the reason).
 
@@ -16,20 +16,20 @@ Severity: **H** high, **M** medium, **L** low. Status: todo, doing, done, partly
 | STD-2 | "Pass with no tests" in Node (`--if-present`, D1) and Rust (`cargo test`, tested) | H | Every stack profile gets `TEST_LIST_CMD`; `scripts/check test` fails when it lists 0 tests. Drop `--if-present` from the Node preset | done |
 | STD-3 | Test tampering invisible (G3, D3; Rust `#[ignore]` passes, tested) | H | `scripts/check test-integrity`: on the PR diff, flag deleted test files/functions, new skip markers (`SKIP_MARKERS` per profile), removed assertions, snapshot rewrites. Agent branches: fail; human branches: needs label `test-change` | done |
 | STD-4 | No coverage gate (G4) | H | `COVERAGE_CMD` per profile producing Cobertura/LCOV; changed lines ≥ `COVERAGE_CHANGED_MIN` (80) via diff-cover; total may not drop below the last `main` value (ratchet file) | done |
-| STD-5 | Branch rules manual and unverified (G5) | H | `scripts/repo-settings apply|verify` with `gh api` rulesets (GitLab: protected branches API); weekly CI job runs `verify` | done |
+| STD-5 | Branch rules manual and unverified (G5) | H | `scripts/repo-settings apply\|verify` with `gh api` rulesets (GitLab: protected branches API); weekly CI job runs `verify` | done |
 | STD-6 | Git hooks silently absent (G6, D4) | M | Pin and install lefthook in `install-tools`; `check fast` warns when `.git/hooks/commit-msg` isn't lefthook's | done |
 | STD-7 | No regression-test check for bug fixes (G7) | M | On `fix/*` PRs: require a new or changed test file, and the Spec Kit bug report verdict `verified` | done (test file required on fix/; Spec Kit verdict not checked) |
 | STD-8 | Proof table not checked (G8) | M | `scripts/check proof`: each `FR-`/`SC-` row names an existing test or says `manual` | done (names, kinds, Issue vs branch; that a named test exists is not checked: STD-71) |
 | STD-9 | No complexity / duplication / dead-code gate (G9) | M | Per profile `COMPLEXITY_CMD` with ratchet thresholds (clippy cognitive_complexity, Roslyn CA1502, radon, eslint complexity, knip) | partly: stage `complexity`, variable `COMPLEXITY_CMD`, playbook step 3 with a command per stack (Python tested); no per-profile default or ratchet file: STD-72 |
 | STD-10 | No architecture-boundary gate (G10; H for DMX-Studio) | M | Per profile `BOUNDARY_CMD` (Rust: crate graph via cargo-deny/workspace; C#: NetArchTest; Python: import-linter; JS: dependency-cruiser); rules in a guarded file | partly: stage `architecture`, `ARCH_CMD`, playbook step 2 per stack (a person writes the layers in an ADR); no per-profile starter config: STD-72 |
 | STD-11 | New dependencies not gated (G11) | M | CI lists added dependencies from lockfile diff; each must exist on the registry, not be on a malicious-package list, and be named in the plan or an ADR | done |
-| STD-12 | Docs lint not built (G12) | L | markdownlint + Vale (house style), report first, block later | partly: `scripts/check docs` (markdownlint-cli2 pinned + relative links) in `all` and CI; Vale / house style not built: STD-76 |
+| STD-12 | Docs lint not built (G12) | L | markdownlint + Vale (house style), report first, block later | done (markdownlint, links and the writing rule with Vale: STD-81 to STD-86) |
 | STD-13 | Build not in the Stop hook (G13) | L | `STOP_STAGES` in `check.config` (default `fast test`) | done (`STOP_STAGES`, default `fast test build`; build is skipped while `BUILD_CMD` is none) |
 | STD-14 | Scope not compared with the plan (G14) | L | Warning when the diff touches files not listed in `plan.md` | done (`scripts/check scope`, warning only) |
 | STD-15 | Gates not proven per stack | H | **Quality canary**: `tests/quality-canary/<profile>/` with one planted failure per gate (unformatted, lint error, failing test, zero tests, skipped test, uncovered code, boundary breach); `scripts/check quality-canary` asserts each gate fails on it | done (rust, python, node; dotnet: STD-24) |
 | STD-16 | Stack profiles only for node, flutter, python | H | Profile format (data, not code) + profiles for **rust** and **dotnet**; `stacks/README.md` lists what each profile must define | done |
-| STD-17 | Stack layer added by hand | M | `/add-stack` skill: reads the accepted ADR 0002, applies the profile, runs the quality canary, reports which gates are proven | done (skill `/stack-layer` + playbook; a person runs `copier update`, the skill proposes the `check.config` lines) |
-| STD-18 | Agent gets feedback only at the end (Stop hook) | M | PostToolUse hook: format/lint the edited file (`FORMAT_FILE_CMD`, `LINT_FILE_CMD` per profile), fast and non-blocking | done (PostToolUse `format-file.sh`, `FORMAT_FILE_CMD`; no `LINT_FILE_CMD`: STD-76) |
+| STD-17 | Stack layer built by hand | M | `/add-stack` skill: reads the accepted ADR 0002, applies the profile, runs the quality canary, reports which gates are proven | done (skill `/stack-layer` + playbook; a person runs `copier update`, the skill proposes the `check.config` lines) |
+| STD-18 | Agent gets feedback only at the end (Stop hook) | M | PostToolUse hook: format/lint the edited file (`FORMAT_FILE_CMD`, `LINT_FILE_CMD` per profile), fast and non-blocking | done (PostToolUse `format-file.sh` with `FORMAT_FILE_CMD`, then `lint-file.sh` with `LINT_FILE_CMD`: STD-84) |
 | STD-19 | No independent review of agent work | M | `.claude/agents/quality-reviewer.md`: read-only subagent checking diff vs spec Proof, test integrity, scope, dependencies; output in the handover; a person still merges | done (agent `quality-reviewer` + skill `/quality-review`; not yet run end to end in Claude Code: STD-77) |
 | STD-20 | Safety tests for hardware not mandatory (DMX-Studio) | H | Constitution VII (physical safety) + profile `SAFETY_TEST_CMD` (tests tagged `safety`) that must exist and run in every CI run | done |
 | STD-21 | No timing / performance budget (DMX-Studio) | M | Benchmark stage with a budget (DMX frame ≤ 22 ms at 44 Hz); report first | partly: stage `perf`, `PERF_CMD`, playbook step 4 (budgets from QA-*); no benchmark harness in the profiles |
@@ -62,7 +62,6 @@ Tested rules and canaries: `stacks/*/rules`, `stacks/*/canary`.
 
 ## Review 3: research steps
 
-
 | ID | Gap (review ref) | Sev | Fix | Status |
 |----|------------------|-----|-----|--------|
 | STD-41 | Feature plans can choose their own stack: plan "Technical Context" asks Language/Dependencies per feature, not tied to ADR 0002 | H | Preset plan template: Technical Context copied from the accepted stack ADR + constitution Project Constraints; a deviation needs a new ADR. `/speckit-plan` stops when ADR 0002 isn't accepted | done |
@@ -80,7 +79,6 @@ Tested rules and canaries: `stacks/*/rules`, `stacks/*/canary`.
 
 ## Review 4: building flow
 
-
 | ID | Gap (review ref) | Sev | Fix | Status |
 |----|------------------|-----|-----|--------|
 | STD-53 | Agent commits blocked on `claude/…` and `ccr-…` branches (Action, cloud sessions; tested) | H | Work-type → branch-prefix map in `check.config` (`AGENT_BRANCH_PATTERNS`, incl. harness prefixes when they carry the work type); set the Action's `branch_prefix` to `fix/` / `release/`; git-policy reads the map | done |
@@ -90,7 +88,7 @@ Tested rules and canaries: `stacks/*/rules`, `stacks/*/canary`.
 | STD-57 | `TODO.md` IDs race between branches (conflict + duplicate `DXS-5`, tested) | M | Agents never assign IDs: they propose items as `DXS-?` in the handover/PR; a person numbers them on `dev`. For agentic projects consider GitHub Issues as tracker (issue number = ID) | done |
 | STD-58 | Person's local path unguarded (commits on `dev`/`main`, any branch name) | M | lefthook pre-commit: refuse commits on `main`/`dev` and branch names outside `<type>/<KEY>-<n>-<slug>`, `spike/…`, `release/v…` (maintainers can override); branch rules stay the gate | done |
 | STD-59 | Issue key, branch and spec folder not linked | M | Preset specify command fills **Issue** from the branch (`feat/DXS-n-…`); `check proof` (STD-8) also checks the spec's Issue matches the branch key | partly: `check proof` compares the spec Issue with the branch key; the Spec Kit specify command does not fill it (hint in the spec template only) |
-| STD-60 | CI conditions keyed on branch prefix miss agent branches (`pr-size` skipped for `claude/*`) | M | Detect agent PRs by label `agent` (set by agent workflows) or `Co-Authored-By` trailers, not by prefix | done (pr-size: fix/, release/, claude/, ccr- or label agent) |
+| STD-60 | CI conditions keyed on branch prefix miss agent branches (`pr-size` skipped for `claude/*`) | M | Detect agent PRs by the label `agent` (set by the agent workflow and by agents that open PRs), not by prefix | done (pr-size: fix/, release/, claude/, ccr- or label agent) |
 | STD-61 | No guidance for parallel work | M | `docs/process/workflow.md`: one issue per `git worktree`; Spec Kit's `feature.json` and the Stop-hook state are already per checkout | done (workflow.md: one issue per worktree) |
 | STD-62 | No reviewer checklist for agent PRs | M | PR template section for agent PRs: proof per requirement, tests not weakened, scope vs plan, new dependencies, Security & Data; quality-reviewer output attached (STD-19) | done |
 | STD-63 | `.specify/feature.json` treated as guardrail (false positive, tested) | L | Exclude Spec Kit local state (`feature.json`, `*/local-config.yml`) from the guardrail pattern | done |
@@ -116,8 +114,27 @@ Tested rules and canaries: `stacks/*/rules`, `stacks/*/canary`.
 | STD-73 | A new dependency is not checked for age (a days-old package is the typical malicious one) | M | `new-deps`: after `verify-package`, fail a new dependency whose first release is younger than N days unless the label `new-dependency` is set | todo |
 | STD-74 | Release and GitLab paths unrun: `release.yml` cosign signing, GitLab tag pipeline, `repo-settings --gitlab` | M | Run on a throwaway repository: tag a release, `cosign verify-blob` as in workflow.md; a GitLab project with a runner; GitLab keyless signing with an ID token | todo |
 | STD-75 | Spec Kit `assess` host allow-list is not configurable; the preset addendum is a text instruction | L | Upstream request for a configurable list, or a project-level setting; until then research is interactive | todo |
-| STD-76 | Vale (house style) and `LINT_FILE_CMD` (lint the edited file) not built | L | Vale with a short style after the docs lint has run for a while; PostToolUse lint hook that reports without blocking | todo |
+| STD-76 | Vale (house style) and `LINT_FILE_CMD` (lint the edited file) not built | L | Vale with a short style after the docs lint has run for a while; PostToolUse lint hook that reports without blocking | done (Vale: STD-81 to STD-86; `LINT_FILE_CMD`: STD-84) |
 | STD-77 | `quality-reviewer` agent, `/quality-review`, `/stack-layer` and the PostToolUse hook not run inside Claude Code or the Action | M | Run each once in a real session and in `claude-agent.yml`; confirm the hooks load (links STD-54) | todo |
 | STD-78 | Licence scan tested with npm only; Python (`uv.lock` without installed packages) and Rust (`Cargo.lock`) may report nothing | M | Plant a GPL dependency in a Python and a Rust test project; if trivy needs installed packages, run the scan after `INSTALL_CMD` or use cargo-deny licences | todo |
 | STD-79 | Rust coverage not run (needs `cargo-llvm-cov`, not installed here); the `dotnet` and `flutter` profiles only rendered | L | Run `scripts/check coverage` in a Rust project with the tool installed; render and run dotnet and flutter where the SDKs exist | todo |
 | STD-80 | Hooks' python3 parser imported modules from the repo: a planted `json.py` made every hook allow everything (found in review) | H | `python3 -I` in `parse-input.sh`; `scripts/check hooks` plants decoy `json.py`/`sys.py` (old parser fails, new passes) | done |
+
+## Writing rule, central AI attribution, checks on the standard itself
+
+| ID | Gap | Sev | Fix | Status |
+|----|-----|-----|-----|--------|
+| STD-81 | Writing rule has no text and no enforcement | M | `docs/process/writing.md` (12 rules), `AGENTS.md` rule 11, `CLAUDE.md` line; Vale rules `DevStandard.*` (errors: Pronouns, History, Filler, Hedging, Exclamation, Emoji, Watermarks, TodoKey; warnings: SentenceLength, Passive, HeadingCase, Substitutions, Spelling, Repetition); `.vale.ini` and a vocabulary, offline | done (every error rule fails and passes, `vale off`, warning-only doc, in `tests/template-tests.sh`) |
+| STD-82 | Vale not pinned or installed | M | `VALE_VERSION` 3.26.0 and `VALE_SHA256` in `check.config` (checksums file of the release, 24 days old; 3.27.0 and 3.28.x were younger than 14 days); `scripts/install-tools [tool...]` installs a subset | done for Linux x86_64 (install tested); macOS and Windows: package manager note only |
+| STD-83 | `docs` stage does not lint prose; PR text unchecked | M | `scripts/check docs [base]` (changed files on a PR), `docs-file`, `pr-text` (env `PR_BODY`); GitHub `checks.yml` and GitLab `docs` and `mr-rules` | done locally; the CI jobs never ran on GitHub or GitLab: STD-91 |
+| STD-84 | Agent sees no lint result for the edited file | M | `.claude/hooks/lint-file.sh` (called by `format-file.sh`, so format runs first): `LINT_FILE_CMD` per profile (ruff, eslint; none for rust, dotnet, flutter: crate- or project-wide) and Vale; stderr and exit 2 | done (ruff, Markdown and clean file tested; eslint, flutter and dotnet not run) |
+| STD-85 | Vale reads comments of some languages only | L | Verified with Vale 3.26.0: Python, JS/TS, Rust (line comments), Go, C#, Java, Kotlin, Swift, C/C++, Ruby, PHP, Scala; not Dart, shell, Lua, SQL, YAML, TOML, F#, Haskell; documented in `writing.md` | todo: reviewers cover the unread languages; revisit when Vale adds them |
+| STD-86 | Docs of the standard break the writing rule | M | Sweep of template docs, skills, agent, PR and MR templates, preset, stacks, README, TODO and PLAN; the quoted rules in `writing.md` and `PLAN.md` sit in `vale off`; upstream Spec Kit wording in `speckit.constitution.md` rewritten in the third person | done (`scripts/check docs` passes here and in 7 generated variants; warnings remain) |
+| STD-87 | Commits, PRs and docs carry AI watermarks | M | `attribution` empty in `settings.json`; constitution V, `AGENTS.md` rule 9 and the README describe the role of AI once; AI-use checkboxes dropped; `commit-msg`, `pr-title` and `pr-text` fail on `WATERMARK_PATTERN`; label `agent` marks agent PRs | done (content and checks tested) |
+| STD-88 | `claude-agent.yml` labels its PRs unverified | M | Step `Label the PR as agent work` reads the action output `branch_name`; allowed tools include `gh pr create` and `gh pr edit --add-label agent` | todo: needs a real run (output name and permissions assumed); zizmor is clean |
+| STD-89 | dev-standard does not follow its own standard | M | Root `AGENTS.md`, `CLAUDE.md`, `lefthook.yml`, `scripts/` (wrappers, `lint`, `setup`, `install-tools`), `check.config` (`ISSUE_KEY=STD`), `.guardrails`, `.claude/` (hooks identical to the rendered template hooks), `tests/hooks/cases.tsv`, `CODEOWNERS` | done (hook cases 73 x 3 parsers; the equality with the template is a test) |
+| STD-90 | dev-standard has no CI | M | `.github/workflows/ci.yml` (`lint`, `render`, `template-tests`, `pr-rules`, `guardrails`, `repo-settings` weekly, `result`) and `dependabot.yml`; actions pinned by SHA | partly: zizmor clean, every command run locally; the workflow never ran on GitHub: STD-91 |
+| STD-91 | CI and settings of the standard unrun | M | Push, open a PR, run `scripts/repo-settings apply` with `GH_REPO=s-kroonen/dev-standard`, then `verify`; check the `render` and `template-tests` jobs and the PR-body step | todo |
+| STD-92 | Claude Code settings key `attribution` not confirmed | M | Run a session with the generated `settings.json`, make a commit and a PR, confirm that no trailer, link or footer appears (key names `commit`, `pr`, `sessionUrl` follow the plan) | todo |
+| STD-93 | Template pins `astral-sh/setup-uv` v10.4.0, younger than 14 days when pinned | L | Dependabot cool-down covers later bumps; `ci.yml` of the standard uses v10.3.3 | todo: move the template pin to a release older than 14 days |
+| STD-94 | Spelling warnings grow with every new term | L | Vale.Spelling prints warnings for unknown words; add terms to `.vale/styles/config/vocabularies/*/accept.txt` | todo: decide whether the spelling check stays on |

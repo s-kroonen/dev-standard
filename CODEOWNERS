@@ -1,0 +1,12 @@
+# Guardrail files need the owner's review (keep in sync with .guardrails).
+/.claude/          @s-kroonen
+/AGENTS.md         @s-kroonen
+/CLAUDE.md         @s-kroonen
+/.github/          @s-kroonen
+/scripts/          @s-kroonen
+/check.config      @s-kroonen
+/lefthook.yml      @s-kroonen
+/.vale.ini         @s-kroonen
+/tests/hooks/      @s-kroonen
+/CODEOWNERS        @s-kroonen
+/.guardrails       @s-kroonen

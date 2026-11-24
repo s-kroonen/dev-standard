@@ -16,6 +16,7 @@
 # variable, from a script interpreter) are treated as the real thing. Best effort: CI and branch
 # rules are the binding gate. Exit 2 blocks and tells the agent why.
 
+# shellcheck disable=SC2034  # read by the sourced parse-input.sh
 input="$(cat)"
 # shellcheck source=parse-input.sh
 source "$(dirname "${BASH_SOURCE[0]}")/parse-input.sh" || { echo "Blocked: .claude/hooks/parse-input.sh is missing." >&2; exit 2; }

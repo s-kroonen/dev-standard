@@ -1,8 +1,8 @@
 # Stack layer: what to do after the first code
 
-Do this after the stack decision is **accepted** (`docs/decisions/0002-choose-the-stack.md`) and
-again when the codebase grows (new part, new kind of input, a UI appears). Order matters: later
-steps need the gates of the earlier ones. The agent skill `/stack-layer` walks it with you.
+Run this after the stack decision is **accepted** (`docs/decisions/0002-choose-the-stack.md`) and
+again when the codebase grows (another part, another kind of input, a UI). Order matters: later
+steps need the gates of the earlier ones. The agent skill `/stack-layer` walks the list.
 
 How it is enforced: every variable below lives in `check.config`. Each is a **command** or
 `"none"` with a reason on the same line (`E2E_CMD="none"   # no UI`). While source files exist and a
@@ -11,7 +11,7 @@ passes. `check.config` is a guardrail file: a person changes it (agents propose 
 
 The commands below are **examples, not pinned**: look up the current version of every tool
 (`scripts/verify-package <ecosystem> <name>`), pin it in the lockfile or the command, and run the
-command once before you rely on it. Replace paths with your own.
+command once before relying on it. Paths are placeholders for the project's own.
 
 | # | Step | Variable | Stage |
 |---|---|---|---|
@@ -38,14 +38,14 @@ command once before you rely on it. Replace paths with your own.
 - **How:** `copier update --trust --data stack=<python|node|rust|dotnet|flutter>`; review the diff.
   Then make the project's own config skip the canary folders (they hold planted problems):
   Python: `extend-exclude` in `pyproject.toml` / `ruff.toml` (the profile passes it on the command
-  line, mirror it for your editor); Node: `tsconfig.json` `include` on your source folders only (not
+  line; the editor config mirrors it); Node: `tsconfig.json` `include` on the source folders only (not
   `.`), `eslint.config.mjs` ignores, `.prettierignore`; Rust: nothing (the canary has its own workspace).
 - **Done when:** `scripts/check quality-canary` and `scripts/check canary` pass, `scripts/check fast`
   and `test` pass on a first small module, and the profile's CI toolchain installs in CI.
 
 ## 2. Architecture boundaries
 
-- **Why:** the layers you wrote down are only real if a tool fails when someone crosses them.
+- **Why:** documented layers are real only when a tool fails as soon as someone crosses them.
 - **When:** as soon as there are two or more parts (modules, packages, crates). Write the layers
   in an ADR first (what may import what).
 - **How:**
@@ -94,11 +94,11 @@ command once before you rely on it. Replace paths with your own.
 | Flutter | `flutter test benchmark`; frame timing with integration tests |
 
 - **Variable:** `PERF_CMD`. **Done when:** the command fails when a budget is exceeded (the budget
-  is an assertion, not just a printed number). Without a measurable QA: `none  # no timing requirement`.
+  is an assertion, not a printed number). Without a measurable QA: `none  # no timing requirement`.
 
 ## 5. UI gates
 
-- **Why:** a UI breaks in ways unit tests don't see: it doesn't start, a flow is gone, it is
+- **Why:** a UI breaks in ways unit tests miss: it does not start, a flow is gone, it is
   unusable with a keyboard, the bundle doubled.
 - **When:** the project has a UI (web, desktop webview, mobile web).
 - **How:** Playwright with `@axe-core/playwright` for accessibility and a smoke flow:
@@ -141,14 +141,14 @@ command once before you rely on it. Replace paths with your own.
 - **Why:** the open opengrep rules miss framework-specific sinks (tested: TypeScript 5 of 8,
   Rust 1 of 6, C# 2 of 7). Dart has no rules at all.
 - **When:** the profile has custom rules for the frameworks it knows (`.opengrep/rules/custom/`).
-  For a framework or language without them (e.g. Dart, a web framework of your own choice):
-  write the rules and the planted cases.
+  For a framework or language without them (for example Dart, or a framework the project chose
+  itself): write the rules and the planted cases.
 - **How:** one rule per vulnerability class in `.opengrep/rules/custom/<framework>-security.yaml`
   (taint mode: input source to dangerous sink); one planted file per class in
   `tests/security-canary/<stack>/` with a tagged line (`V:CMDI`); the rule id in
   `tests/security-canary/expected.txt`. Same way as the existing `stacks/*/rules` of dev-standard.
   For Dart: also a review checklist in `docs/` until rules exist, and `flutter analyze` with strict lints.
-- **Done when:** `scripts/check canary` lists your rule ids and fails when the rule is removed.
+- **Done when:** `scripts/check canary` lists the rule ids and fails when a rule is removed.
   (Rules and canary files are guardrail files: a person adds them.)
 
 ## 9. Fuzzing
@@ -176,7 +176,7 @@ command once before you rely on it. Replace paths with your own.
 - **When:** the app serves HTTP and can be started in CI with test data.
 - **How:** a script in the repo that starts the app, waits for it, runs ZAP baseline against it
   (`zap-baseline.py -t http://localhost:<port>` from the official ZAP container, image pinned by
-  digest you looked up), and stops the app. `DAST_CMD="scripts/dast.sh"`. Report first; make the
+  digest looked up beforehand), and stops the app. `DAST_CMD="scripts/dast.sh"`. Report first; make the
   baseline fail on warnings once the first findings are triaged.
 - **Variable:** `DAST_CMD`. **Done when:** CI runs it against a real instance. No HTTP: `none  # no HTTP service`.
 
@@ -205,15 +205,15 @@ command once before you rely on it. Replace paths with your own.
   control); confirm that `dotnet test` with zero tests fails the test-count check, that
   `TreatWarningsAsErrors` makes the lint gate fail, and that the coverage file path is right.
 - **Done when:** `scripts/check quality-canary` passes with all cases, and the profile's comment in
-  `check.config` no longer says UNVERIFIED.
+  `check.config` has lost the UNVERIFIED note.
 
 ## 14. Review the research (after the first working build)
 
-- **Why:** research was done before there was code. The build shows which assumptions held.
+- **Why:** research happens before code exists. The build shows which assumptions held.
 - **How:** (1) update the architecturally significant requirements in
   `docs/product/quality-attributes.md` with what was measured; (2) for a remake, write
   `docs/research/previous-version-retrospective.md` from `retrospective-template.md` while the
   old and new versions can still be compared; (3) re-run `/stack-concerns` for concerns that came up
-  during the build; (4) mark research notes that no longer hold `Status: stale`
+  during the build; (4) mark research notes that have stopped holding `Status: stale`
   (`scripts/check research` then keeps them out of decisions). Tracker item: `{{ issue_key }}-6`.
 - **Done when:** `scripts/check research` passes and the ASR table says what was measured.

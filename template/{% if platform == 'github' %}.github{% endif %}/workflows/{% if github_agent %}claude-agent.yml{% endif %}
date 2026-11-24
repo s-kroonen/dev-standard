@@ -66,13 +66,24 @@ jobs:
             echo "prompt<<EOF_PROMPT"
             if [[ "$WORK" == release ]]; then echo "Prepare the next release with /release (AGENTS.md section 2)."
             else echo "Fix bug $ISSUE from TODO.md: /speckit-bug-assess, then fix with a regression test. Escalate per AGENTS.md instead of fixing when the rules say so."; fi
-            echo "Open a PR titled per AGENTS.md section 6. Never merge."
+            echo "Open a PR titled per AGENTS.md section 6, with the label agent (gh pr create --label agent). Never merge."
             echo "EOF_PROMPT"
           } >> "$GITHUB_OUTPUT"
       - uses: anthropics/claude-code-action@eb56b6666facdbd501035f4a0269d8caee2e7a8b # v1.0.289
+        id: claude
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: ${{ steps.todo.outputs.prompt }}
           branch_prefix: "claude/"
           claude_args: >-
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(scripts/check:*),Bash(scripts/next-version:*),Bash(scripts/verify-package:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh pr view:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(scripts/check:*),Bash(scripts/next-version:*),Bash(scripts/verify-package:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh pr edit --add-label agent:*),Bash(gh pr view:*)"
+      # The label marks agent work for the pr-size check and for reviewers (the PR template). The
+      # action's branch is the only link between this run and its PR.
+      - name: Label the PR as agent work
+        if: always() && steps.claude.outputs.branch_name != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.claude.outputs.branch_name }}
+        run: |
+          pr="$(gh pr list --head "$BRANCH" --json number --jq '.[0].number // empty')"
+          if [ -n "$pr" ]; then gh pr edit "$pr" --add-label agent; else echo "No PR for $BRANCH yet."; fi

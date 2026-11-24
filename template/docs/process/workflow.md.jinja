@@ -13,30 +13,30 @@ How work flows from idea to release. Rules: `CONSTITUTION.md` (why) and `AGENTS.
 | 5. Research per concern; spikes where only code can answer | `docs/research/stack-*.md`, `spike/*` branches | `/stack-research` |
 | 6. Stack decision (owner accepts) | `docs/decisions/0002-choose-the-stack.md` → accepted | `/stack-decide` |
 | 7. Stack layer | the checklist [`stack-layer.md`](stack-layer.md): profile, boundaries, complexity, performance, UI, contracts, security tools, SAST rules, fuzzing, DAST, Docker, coverage; every variable in `check.config` decided | `copier update --trust --data stack=<name>`, then `/stack-layer` |
-| 8. First working build | review the research: ASRs, retrospective (remake), new concerns, stale notes | step 14 of the playbook |
+| 8. First working build | review the research: ASRs, retrospective (remake), added concerns, stale notes | step 14 of the playbook |
 
 Research notes are dated, verified against the registries and re-checked
 (`docs/research/README.md`); `scripts/check research` enforces it.
 
 ## Feature ({{ feature_level }})
 
-1. Item in {% if tracker == 'todo' %}`TODO.md`{% else %}the tracker{% endif %} with acceptance criteria; branch `feat/{{ issue_key }}-<n>-<slug>`{% if feature_level == 'ai-assist' %} (you create it){% endif %}.
+1. Item in {% if tracker == 'todo' %}`TODO.md`{% else %}the tracker{% endif %} with acceptance criteria; branch `feat/{{ issue_key }}-<n>-<slug>`{% if feature_level == 'ai-assist' %} (the owner creates it){% endif %}.
 2. {% if use_speckit %}`/speckit-specify` → `/speckit-clarify` → `/speckit-plan` → `/speckit-tasks` → `/speckit-analyze`{% else %}Spec and plan in `specs/<n>-<slug>/` with the same sections as the Spec Kit templates{% endif %}. Review the spec (Proof, Security & Data) and the plan (Constitution and Guardrails gates) before code.
 3. {% if use_speckit %}`/speckit-implement`, then `/speckit-converge` until converged.{% else %}Build with the agent.{% endif %} The Stop hook runs the checks.
-4. {% if feature_level == 'ai-assist' %}You review every change, edit, run `scripts/check all`, commit `feat({{ issue_key }}-<n>): …`, open the PR.{% else %}The agent commits, pushes and opens the PR; you review and merge.{% endif %}
+4. {% if feature_level == 'ai-assist' %}A person reviews every change, edits, runs `scripts/check all`, commits `feat({{ issue_key }}-<n>): …` and opens the PR.{% else %}The agent commits, pushes and opens the PR; a person reviews and merges.{% endif %}
 
 ## Bug ({{ bug_level }})
 
 1. Item with the symptom and how to reproduce it.
-2. {% if bug_level == 'agentic' %}The agent{% else %}You, with the agent,{% endif %}: {% if use_speckit %}`/speckit-bug-assess` (cause) → `/speckit-bug-fix` → `/speckit-bug-test` (verdict `verified`){% else %}find the cause, write a failing test, fix, verify{% endif %}.
+2. {% if bug_level == 'agentic' %}The agent{% else %}A person, with the agent,{% endif %}: {% if use_speckit %}`/speckit-bug-assess` (cause) → `/speckit-bug-fix` → `/speckit-bug-test` (verdict `verified`){% else %}find the cause, write a failing test, fix, verify{% endif %}.
 3. {% if bug_level == 'agentic' %}Branch `fix/{{ issue_key }}-<n>-<slug>`, commit `fix({{ issue_key }}-<n>): …`, PR with the handover. A person merges.
-4. **Escalation**: design change, public contract, security, data or hardware safety, a new dependency or > ~200 lines → the agent stops with a handover; the item's level becomes `ai-assist`.{% else %}You commit and merge.{% endif %}
+4. **Escalation**: design change, public contract, security, data or hardware safety, a new dependency or > ~200 lines → the agent stops with a handover; the item's level becomes `ai-assist`.{% else %}A person commits and merges.{% endif %}
 
 ## Parallel work and hand-over
 
 - **One issue per worktree:** `git worktree add ../<repo>-{{ issue_key }}-<n> <branch>`. Each worktree
   has its own branch, Spec Kit state (`.specify/feature.json`) and Stop-hook state, so two agents
-  (or an agent and you) don't overwrite each other. Remove it after the merge (`git worktree remove`).
+  (or an agent and a person) don't overwrite each other. Remove it after the merge (`git worktree remove`).
 - **Person ↔ agent:** a person may take over any branch at any time and records it by setting the
   item's Level to `ai-assist`. An agent continues only a branch it created or one it is asked to
   continue. After a switch, the one who continues reads the last handover first.
@@ -51,7 +51,7 @@ CI adds `proof` (the spec's Issue matches the branch, every FR-/SC- has proof) a
 
 1. `/release` (or by hand): `scripts/next-version` computes the version from the commits since the
    last tag; `scripts/next-version --notes` writes the changelog section.
-2. {% if release_level == 'agentic' %}The agent creates `release/v<x.y.z>`, updates `CHANGELOG.md` (and the version file, once the stack has one), commits `chore(release): v<x.y.z>` and opens the PR into `main`.{% else %}You prepare the branch and changelog with the agent's help.{% endif %}
+2. {% if release_level == 'agentic' %}The agent creates `release/v<x.y.z>`, updates `CHANGELOG.md` (and the version file, once the stack has one), commits `chore(release): v<x.y.z>` and opens the PR into `main`.{% else %}A person prepares the branch and changelog, with the agent's help.{% endif %}
 3. A person reviews, merges into `main`, tags `v<x.y.z>` and pushes the tag; then merges `main` back into `dev`.
 4. The tag runs the release workflow: checks, SBOM, `SHA256SUMS` signed keyless with cosign, provenance
    attestation, GitHub release with the changelog section, back-merge PR (GitLab: tag pipeline with SBOM, release and MR).
@@ -61,8 +61,8 @@ then `sha256sum -c SHA256SUMS`.
 
 ## Spikes
 
-A spike answers one technical question with throwaway code (e.g. "can we drive the device at 44 Hz
-from this runtime on Windows?").
+A spike answers one technical question with throwaway code (for example "can this runtime drive the
+device at 44 Hz on Windows?").
 
 - Branch `spike/{{ issue_key }}-<n>-<slug>`, code under `spikes/<slug>/`, a time-box in `TODO.md`.
 - The project's gates don't apply to `spikes/`; `scripts/check fast` fails if `spikes/` reaches any

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#
+# Lint of the shell scripts and YAML files of dev-standard (LINT_CMD in check.config, job `lint` in
+# CI): `bash -n` and shellcheck on every script of this repository and of the template, and a YAML
+# parse of every workflow and the GitLab file. Template files with Jinja in the YAML are parsed
+# after rendering by the CI job `render`.
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+export PATH="$PWD/.tools/bin:$PATH"
+rc=0
+
+mapfile -t scripts < <(git ls-files --cached --others --exclude-standard -- 'scripts/*' 'tests/*.sh' '.claude/hooks/*.sh' 'template/scripts/*' 'template/.claude/hooks/*.sh' | sort -u)
+for f in "${scripts[@]}"; do bash -n "$f" || { echo "FAIL bash -n $f"; rc=1; }; done
+echo "bash -n: ${#scripts[@]} scripts"
+
+if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck -S warning "${scripts[@]}" || rc=1
+    echo "shellcheck $(shellcheck --version | sed -n 's/^version: //p'): ${#scripts[@]} scripts"
+elif [[ -n "${CI:-}" ]]; then echo "FAIL shellcheck is not installed (scripts/install-tools shellcheck)"; rc=1
+else echo "WARN shellcheck is not installed: scripts/install-tools shellcheck"; fi
+
+# YAML: plain files only (a *.jinja file with template tags is parsed after rendering).
+mapfile -d '' yaml < <(git ls-files -z --cached --others --exclude-standard -- '.github/workflows/*.yml' '.github/dependabot.yml' 'template/*workflows/*.yml' 'template/*codeql/*.yml')
+yaml+=("template/{% if platform == 'gitlab' %}.gitlab-ci.yml{% endif %}.jinja")
+parse='import sys, yaml
+for p in sys.argv[1:]:
+    try: yaml.safe_load(open(p, encoding="utf-8"))
+    except Exception as e: print("FAIL yaml " + p + ": " + str(e).splitlines()[0]); sys.exit(1)
+print("yaml: " + str(len(sys.argv) - 1) + " files parse")'
+if python3 -I -c 'import yaml' 2>/dev/null; then python3 -I -c "$parse" "${yaml[@]}" || rc=1
+elif command -v pipx >/dev/null 2>&1; then pipx run --spec pyyaml==6.0.4 python -I -c "$parse" "${yaml[@]}" || rc=1
+elif command -v uvx >/dev/null 2>&1; then uvx --from pyyaml==6.0.4 python -I -c "$parse" "${yaml[@]}" || rc=1
+else echo "WARN no PyYAML, pipx or uvx: YAML not parsed"; fi
+exit $rc

@@ -32,6 +32,8 @@
 ^osv-scanner\.toml$
 ^\.semgrepignore$
 ^\.markdownlint-cli2\.jsonc$
+^\.vale\.ini$
+^\.vale/
 ^\.opengrep/
 ^tests/security-canary/
 ^tests/quality-canary/

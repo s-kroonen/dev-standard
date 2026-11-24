@@ -76,3 +76,14 @@
 0	claude/x	edit	docs/process/stack-layer.md
 0	claude/x	edit	docs/research/stack-timing.md
 0	claude/x	edit	docs/decisions/0002-choose-the-stack.md
+# protect-paths: the writing rule's files
+2	claude/x	edit	.vale.ini
+2	claude/x	edit	.vale/styles/DevStandard/Pronouns.yml
+2	claude/x	edit	.vale/styles/config/vocabularies/Project/accept.txt
+2	claude/x	edit	.claude/hooks/lint-file.sh
+2	claude/x	bash	echo x >> .vale.ini
+2	claude/x	bash	rm -rf .vale
+0	claude/x	bash	cat .vale.ini
+0	claude/x	edit	docs/process/writing.md
+2	claude/x	bash	rm -rf .claude
+0	claude/x	bash	ls .claudette-notes

@@ -133,7 +133,7 @@
 - [Assumption about data/environment, e.g., "Existing authentication system will be reused"]
 - [Dependency on existing system/service, e.g., "Requires access to the existing user profile API"]
 
-## Proof *(mandatory, added by the dev-standard preset)*
+## Proof *(mandatory, dev-standard preset)*
 
 <!--
   One row per functional requirement and success criterion: how will we show it works?
@@ -148,7 +148,7 @@
 | FR-001 | [test name or check] | test |
 | SC-001 | [measurement] | manual |
 
-## Security & Data *(mandatory, added by the dev-standard preset)*
+## Security & Data *(mandatory, dev-standard preset)*
 
 - **User input** entering the system in this feature: [sources, and how each is validated]
 - **Dangerous operations** reached by that input (network calls, file paths, shell, eval, queries,

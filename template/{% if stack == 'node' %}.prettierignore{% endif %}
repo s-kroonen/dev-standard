@@ -5,6 +5,7 @@ spikes/
 .claude/
 .github/
 .opengrep/
+.vale/
 docs/
 specs/
 *.md

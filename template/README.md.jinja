@@ -8,7 +8,7 @@
 
 - [About](#about)
 - [Getting started](#getting-started)
-- [How we work](#how-we-work)
+- [How the project works](#how-the-project-works)
 - [Checks](#checks)
 - [How AI is used](#how-ai-is-used)
 - [Releases](#releases)
@@ -30,12 +30,13 @@ scripts/setup          # git hooks, pinned security scanners, rule sets
 scripts/check all      # what CI runs
 ```
 
-## How we work
+## How the project works
 
 | Document | What |
 |---|---|
 | [CONSTITUTION.md](CONSTITUTION.md) | The principles; every plan is checked against them |
-| [AGENTS.md](AGENTS.md) | How we work: work types, AI levels, rules for people and AI tools |
+| [AGENTS.md](AGENTS.md) | Working rules: work types, AI levels, rules for people and AI tools |
+| [docs/process/writing.md](docs/process/writing.md) | The writing rule for docs, comments and PR text |
 | {% if tracker == 'todo' %}[TODO.md](TODO.md){% else %}Tracker{% endif %} | Issues `{{ issue_key }}-<n>` |
 | [docs/process/workflow.md](docs/process/workflow.md) | Idea → decision → feature / bug / release |
 | [docs/decisions/](docs/decisions/) | Decision records |
@@ -54,7 +55,8 @@ Every check runs through `scripts/check`: the git hooks, the AI agent and CI cal
 | `scripts/check research` | research notes dated and verified; decisions cite evidence (in `fast`) |
 | `scripts/check stack-layer` | after the first code: every playbook command in `check.config` decided |
 | `scripts/check licenses` | forbidden and restricted licences (trivy) |
-| `scripts/check docs` | markdownlint and relative links |
+| `scripts/check docs` | markdownlint, relative links and the writing rule (Vale) |
+| `scripts/check pr-text` | the PR or MR body (env `PR_BODY`) against the writing rule and the watermark ban |
 | `scripts/verify-package` | does a package exist, its licence and last release (registry API) |
 | `scripts/check secrets` | secrets in the full history (gitleaks) |
 | `scripts/check deps` | fixable high/critical vulnerabilities in production dependencies (trivy) |
@@ -71,10 +73,12 @@ AI tools (mainly Claude Code{% if use_speckit %}, with [GitHub Spec Kit](https:/
 - **Bug fixes ({{ bug_level }}):** {% if bug_level == 'agentic' %}an agent finds the cause, fixes it with a regression test on its own branch and opens a pull request; a person reviews and merges. Bugs touching design, security, data or hardware safety go to a person.{% else %}AI helps find and fix; a person commits.{% endif %}
 - **Releases ({{ release_level }}):** {% if release_level == 'agentic' %}an agent computes the version from the commits and prepares the changelog on a release branch; a person merges and tags.{% else %}a person releases, with AI help for the changelog.{% endif %}
 
-Agent commits carry a `Co-Authored-By` trailer and a session link; commits made by a person after AI
-help are authored by that person. Pull requests state the AI use. The rules every AI tool follows
-are in [AGENTS.md](AGENTS.md); the files that check and constrain them are listed in
-[`.guardrails`](.guardrails).
+Commits, pull requests, code and docs carry no AI watermark (no `Co-Authored-By` trailer naming a
+tool, no session link, no "generated with" line); the role of AI is described here and in
+[AGENTS.md](AGENTS.md), once. Agent work stays traceable through its branch (`claude/`, `ccr-`, the
+agentic work types), the pull request label `agent` and the bot author of Action commits. The rules
+every AI tool follows are in [AGENTS.md](AGENTS.md); the files that check and constrain them are
+listed in [`.guardrails`](.guardrails).
 
 ## Releases
 

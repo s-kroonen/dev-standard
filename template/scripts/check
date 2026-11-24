@@ -24,8 +24,8 @@
 #   scripts/check quality-canary     every quality gate still fails on its planted case in tests/quality-canary
 #   scripts/check image <ref>        vulnerabilities in a built image (trivy image)
 #   scripts/check pr-size [base]     fail a too large change
-#   scripts/check pr-title "<title>" the PR title is a valid commit subject (it becomes the squash commit)
-#   scripts/check commit-msg <f>     commit message format (commit-msg hook)
+#   scripts/check pr-title "<title>" the PR title is a valid commit subject (it becomes the squash commit), no AI watermark
+#   scripts/check commit-msg <f>     commit message format and no AI watermark (commit-msg hook)
 #   scripts/check branch             commits only on <type>/<KEY>-<n>-<slug>, spike/…, release/v…, agent branches (pre-commit)
 #   scripts/check regression-test [base]  a fix/ branch adds or changes a test
 #   scripts/check new-deps [base]    every added dependency is named in a plan or decision record
@@ -34,12 +34,18 @@
 #   scripts/check research           research notes have their header; decisions link evidence; no stale evidence (also in fast)
 #   scripts/check proof [base]       changed specs: Issue matches the branch, every FR-/SC- has a proof
 #   scripts/check scope [base]       WARN only: changed files the plan and tasks don't mention
-#   scripts/check docs               markdownlint + relative links in the Markdown files
+#   scripts/check docs [base]        markdownlint + relative links + the writing rule (Vale: errors fail, warnings print);
+#                                    with a base branch Vale reads only the changed files
+#   scripts/check docs-file <path>   the writing rule (Vale) for one file; used by the PostToolUse hook
+#   scripts/check pr-text            the PR or MR body (env PR_BODY): writing rule (Vale) and no AI watermark
 #   scripts/check all                everything above that needs no base branch
 #
 # Project commands and pinned tools live in check.config. Security tools run from the local binary
 # when present (scripts/install-tools, GitLab job images) or else from their pinned container image.
 # Exit code: 0 when every requested check passed, 1 otherwise.
+
+# STOP_STAGES, FORMAT_FILE_CMD and LINT_FILE_CMD are read by the hooks, not here.
+# shellcheck disable=SC2034
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -80,6 +86,12 @@ RESEARCH_EXEMPT_ADRS="0001"  # decisions that need no research evidence
 MARKDOWNLINT_VERSION="0.24.0"
 STOP_STAGES="fast test build"   # read by .claude/hooks/run-checks.sh
 FORMAT_FILE_CMD=""              # read by .claude/hooks/format-file.sh; {file} = the edited file
+LINT_FILE_CMD=""                # read by .claude/hooks/lint-file.sh (run after the format step); {file} = the edited file
+VALE_EXCLUDE=""                 # ERE of paths Vale skips (content in another language, vendored text)
+VALE_SKIP='^(\.git|\.specify|\.opengrep|\.tools|node_modules|spikes|specs)/|(^|/)node_modules/|^tests/[a-z-]*-canary/|^docs/handover/|^\.claude/skills/speckit-'
+VALE_CODE_EXTS="py|pyi|js|jsx|mjs|cjs|ts|tsx|rs|go|cs|java|kt|kts|swift|c|cc|cpp|h|hpp|rb|php|scala"   # languages whose comments Vale reads
+WATERMARK_PATTERN='^[[:space:]]*Co-Authored-By:.*(Claude|Anthropic|Copilot|ChatGPT|OpenAI|Gemini|Codex|Cursor|Aider|Devin)|^[[:space:]]*Claude-Session:|Generated (with|by) \[?(Claude|Copilot|ChatGPT|Codex|Cursor|Gemini)|🤖|claude\.ai/(code|chat)/[^[:space:]]*session'
+VALE_IMAGE=""                   # no official image is pinned: install the binary (scripts/install-tools)
 SECURITY_SEVERITY="HIGH,CRITICAL"
 CANARY_DIR="tests/security-canary"
 QUALITY_CANARY_DIR="tests/quality-canary"   # check.config points it at tests/quality-canary/<stack>
@@ -460,7 +472,7 @@ quality_canary() {
             format-*)      gate=format;     cmd="$FORMAT_CMD" ;;
             lint-*)        gate=lint;       cmd="$LINT_CMD" ;;
             typecheck-*)   gate=typecheck;  cmd="$TYPECHECK_CMD" ;;
-            test-fails-*)  gate=test;       cmd="$TEST_CMD" ;;
+            test-fails-*)  gate="test";      cmd="$TEST_CMD" ;;
             test-zero-*)   gate=test-count; cmd="$TEST_LIST_CMD" ;;
             skip-marker-*) gate=skip-marker; cmd="" ;;
             *) continue ;;
@@ -680,9 +692,19 @@ pr_size() {
     else fail "pr-size"; echo "  Split the change or hand it to a person; a person who has reviewed it adds the label 'large-change'."; fi
 }
 
+# AI watermarks (trailers naming an AI tool, session links, "generated with" lines) in the text on
+# stdin; prints the offending lines. The role of AI is described once, in AGENTS.md and the README.
+watermark_lines() { grep -iE -- "$WATERMARK_PATTERN" || true; }
+
 commit_msg() {
     # Conventional Commits with the issue key as scope: feat(APP-12): add fixture groups
-    local file="${1:?usage: scripts/check commit-msg <file>}" first type
+    local file="${1:?usage: scripts/check commit-msg <file>}" first type marks
+    marks="$(grep -vE '^#' "$file" | watermark_lines)"
+    if [[ -n "$marks" ]]; then
+        echo "Commit messages carry no AI watermark (AGENTS.md rule 9):" >&2
+        sed 's/^/  /' <<<"$marks" >&2
+        return 1
+    fi
     first="$(head -n 1 "$file")"
     [[ "$first" =~ ^(Merge|Revert|fixup!|squash!) ]] && return 0
     local re="^(${COMMIT_TYPES})(\\(([A-Za-z0-9._/-]+)\\))?(!)?: [^ ].*$"
@@ -707,6 +729,7 @@ pr_title() {
     local title="${1:?usage: scripts/check pr-title \"<title>\"}" f
     bold "── pr-title: $title"
     if [[ "$title" =~ ^(Merge|Revert|fixup!|squash!) ]]; then fail "pr-title"; echo "  Use a Conventional Commit title."; return; fi
+    if [[ -n "$(watermark_lines <<<"$title")" ]]; then fail "pr-title"; echo "  The title carries an AI watermark."; return; fi
     f="$(mktemp)"; printf '%s\n' "$title" > "$f"
     if commit_msg "$f"; then pass "pr-title"; else fail "pr-title"; fi
     rm -f "$f"
@@ -885,11 +908,61 @@ markdownlint() {
     command -v npx >/dev/null 2>&1 || { echo "npx not found: markdownlint-cli2 needs Node." >&2; return 127; }
     npx --yes "markdownlint-cli2@${MARKDOWNLINT_VERSION}" 2>&1
 }
+
+# The writing rule (docs/process/writing.md) with Vale: Markdown prose and the comments of the
+# languages Vale reads (.vale.ini). Errors fail, warnings print. A path is read when it is not
+# skipped (VALE_SKIP: Spec Kit output, canaries, vendored rules; VALE_EXCLUDE: project content in
+# another language) and is Markdown or has a source extension of VALE_CODE_EXTS.
+vale_wanted() {
+    local f="$1"
+    [[ "$f" =~ $VALE_SKIP ]] && return 1
+    [[ -n "$VALE_EXCLUDE" && "$f" =~ $VALE_EXCLUDE ]] && return 1
+    [[ "$f" == *.md ]] && return 0
+    [[ ! "$f" =~ ^\.claude/ && "$f" =~ \.(${VALE_CODE_EXTS})$ ]]
+}
+
+# Files Vale reads, one per line. With a base branch: only the files that differ from it.
+vale_files() {
+    local base="${1:-}" f
+    {
+        if [[ -n "$base" ]] && git rev-parse --verify -q "$base" >/dev/null; then git diff --name-only --diff-filter=AMR "$base"...HEAD
+        else git ls-files --cached --others --exclude-standard; fi
+    } | while IFS= read -r f; do [[ -f "$f" ]] && vale_wanted "$f" && printf '%s\n' "$f"; done | sort -u
+}
+
+vale_run() {
+    [[ -f .vale.ini ]] || { skip "writing rule (no .vale.ini)"; return; }
+    local files=(); mapfile -t files < <(vale_files "${1:-}")
+    if [[ ${#files[@]} -eq 0 ]]; then skip "writing rule (no Markdown or source files to read)"; return; fi
+    run_tool "writing rule (Vale, ${#files[@]} files${1:+ changed against $1})" tool vale "$VALE_IMAGE" --no-wrap "${files[@]}"
+}
+
 docs() {
     bold "── docs"
     doc_links
     if [[ -f .markdownlint-cli2.jsonc ]]; then run_tool "docs lint (markdownlint-cli2 ${MARKDOWNLINT_VERSION})" markdownlint
     else skip "docs lint (no .markdownlint-cli2.jsonc)"; fi
+    vale_run "${1:-}"
+}
+
+# One file, for the PostToolUse hook: silent when the file is out of scope or Vale is not installed.
+docs_file() {
+    local f="${1:?usage: scripts/check docs-file <path>}"
+    f="${f#"$ROOT"/}"; f="${f#./}"
+    [[ -f "$f" && -f .vale.ini ]] && vale_wanted "$f" || return 0
+    command -v vale >/dev/null 2>&1 || return 0
+    vale --no-wrap "$f"
+}
+
+# The PR or MR body arrives in the environment (PR_BODY), never interpolated into a script.
+vale_stdin() { printf '%s\n' "$PR_BODY" | tr -d '\r' | tool vale "$VALE_IMAGE" --no-wrap --ext=.md; }
+pr_text() {
+    bold "── pr-text"
+    if [[ -z "${PR_BODY//[[:space:]]/}" ]]; then skip "pr-text (PR_BODY is empty)"; return; fi
+    local marks; marks="$(watermark_lines <<<"$PR_BODY")"
+    if [[ -n "$marks" ]]; then fail "pr-text"; echo "  The text carries an AI watermark (AGENTS.md rule 9):"; sed 's/^/    /' <<<"$marks"; return; fi
+    [[ -f .vale.ini ]] || { skip "pr-text (no .vale.ini)"; return; }
+    run_tool "pr-text (Vale)" vale_stdin
 }
 
 # Runs the Claude Code hooks against tests/hooks/cases.tsv in a throwaway repo:
@@ -958,7 +1031,9 @@ case "${1:-all}" in
     research)        research ;;
     proof)           proof "${2:-}" ;;
     scope)           scope "${2:-}" ;;
-    docs)            docs ;;
+    docs)            docs "${2:-}" ;;
+    docs-file)       docs_file "${2:-}"; exit $? ;;
+    pr-text)         pr_text ;;
     licenses)        licenses ;;
     architecture)    playbook_step "architecture" "$ARCH_CMD" ;;
     complexity)      playbook_step "complexity" "$COMPLEXITY_CMD" ;;
@@ -974,7 +1049,7 @@ case "${1:-all}" in
                      playbook_step "perf" "$PERF_CMD"; playbook_step "e2e" "$E2E_CMD"; playbook_step "contract" "$CONTRACT_CMD"
                      playbook_step "security-native" "$SECURITY_NATIVE_CMD"; playbook_step "fuzz" "$FUZZ_CMD"; playbook_step "dast" "$DAST_CMD"
                      stack_layer; step "build" "$BUILD_CMD"; secrets; deps; licenses; sast; config; canary; quality_canary; hooks; docs ;;
-    *)               awk 'NR >= 3 && /^#/ { print } /^set /{ exit }' "$0"; exit 2 ;;
+    *)               awk 'NR >= 3 && /^#/ { print } /^$/ { exit }' "$0"; exit 2 ;;
 esac
 
 echo

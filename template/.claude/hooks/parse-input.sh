@@ -1,3 +1,4 @@
+# shellcheck shell=bash disable=SC2154
 # Sourced by the Claude Code hooks (not run by itself). The caller sets $input to the hook's JSON.
 #   hook_command   the shell command of a Bash tool call (tool_input.command)
 #   hook_paths     the file paths of an edit tool call (file_path, notebook_path), one per line

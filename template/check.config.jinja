@@ -11,6 +11,7 @@
 INSTALL_CMD="none"
 FORMAT_CMD="none"
 FORMAT_FILE_CMD="none"
+LINT_FILE_CMD="none"
 LINT_CMD="none"
 TYPECHECK_CMD="none"
 TEST_CMD="none"
@@ -25,6 +26,7 @@ INSTALL_CMD="uv sync --frozen"
 RUFF_EXCLUDE="--config 'extend-exclude=[\"tests/quality-canary\", \"tests/security-canary\", \"spikes\", \".specify\"]'"
 FORMAT_CMD="uv run ruff format --check $RUFF_EXCLUDE ."
 FORMAT_FILE_CMD="uv run ruff format {file}"   # after each edit by the agent (.claude/hooks/format-file.sh)
+LINT_FILE_CMD="uv run ruff check {file}"   # after each edit by the agent (.claude/hooks/lint-file.sh)
 LINT_CMD="uv run ruff check $RUFF_EXCLUDE ."
 TYPECHECK_CMD="uv run mypy --exclude '^(tests/(quality|security)-canary|spikes|\.specify)/' ."
 PYTEST_IGNORE="--ignore=tests/quality-canary --ignore=tests/security-canary --ignore=spikes"
@@ -45,6 +47,7 @@ OPENGREP_OPEN_RULESETS="python dockerfile generic/secrets yaml/github-actions"
 INSTALL_CMD="npm ci --ignore-scripts"
 FORMAT_CMD="npx prettier --check ."
 FORMAT_FILE_CMD="npx prettier --write {file}"
+LINT_FILE_CMD="npx eslint --max-warnings=0 {file}"
 LINT_CMD="npx eslint --max-warnings=0 --ignore-pattern 'tests/*-canary/**' --ignore-pattern 'spikes/**' --ignore-pattern '.specify/**' --ignore-pattern 'coverage/**' --ignore-pattern 'dist/**' ."
 TYPECHECK_CMD="npx tsc --noEmit"
 VITEST_EXCLUDE="--exclude 'tests/*-canary/**' --exclude 'spikes/**'"
@@ -64,6 +67,7 @@ OPENGREP_EXCLUDE_RULES="opengrep.rules.open.typescript.react.best-practice.react
 INSTALL_CMD="cargo fetch --locked"
 FORMAT_CMD="cargo fmt --all -- --check"
 FORMAT_FILE_CMD="rustfmt --edition 2021 {file}"   # keep the edition of Cargo.toml
+LINT_FILE_CMD="none"   # clippy works on the whole crate: the Stop hook runs it
 LINT_CMD="cargo clippy --all-targets --all-features --locked -- -D warnings"
 TYPECHECK_CMD="none"   # the compiler is the type checker (clippy builds)
 TEST_CMD="cargo test --all-targets --locked"
@@ -83,6 +87,7 @@ OPENGREP_OPEN_RULESETS="rust dockerfile generic/secrets yaml/github-actions"
 INSTALL_CMD="dotnet restore --locked-mode"
 FORMAT_CMD="dotnet format --verify-no-changes"
 FORMAT_FILE_CMD="dotnet format --include {file}"   # UNVERIFIED
+LINT_FILE_CMD="none"   # the build lints the whole project: the Stop hook runs it
 LINT_CMD="dotnet build --no-restore -warnaserror"
 TYPECHECK_CMD="none"   # the compiler is the type checker
 TEST_CMD="dotnet test --no-restore"
@@ -100,6 +105,7 @@ OPENGREP_OPEN_RULESETS="csharp dockerfile generic/secrets yaml/github-actions"
 INSTALL_CMD="flutter pub get --enforce-lockfile"
 FORMAT_CMD="dart format --output=none --set-exit-if-changed lib test"
 FORMAT_FILE_CMD="dart format {file}"
+LINT_FILE_CMD="none"   # flutter analyze works on the whole project: the Stop hook runs it
 LINT_CMD="flutter analyze --fatal-infos"
 TYPECHECK_CMD="none"   # flutter analyze covers it
 TEST_CMD="flutter test"
@@ -162,6 +168,11 @@ LICENSE_SEVERITY="HIGH,CRITICAL"              # trivy licence classes that block
 RESEARCH_MAX_AGE_DAYS=90                      # research findings are re-checked within this time (docs/research/README.md)
 RESEARCH_EXEMPT_ADRS="0001"                   # decision numbers that need no research evidence
 STOP_STAGES="fast test build"                 # what the agent's Stop hook runs (.claude/hooks/run-checks.sh)
+# Vale (writing rule, docs/process/writing.md): a path regex for content in another language or vendored
+# text that the prose rules skip. Markdown and source comments are linted otherwise; see .vale.ini.
+VALE_EXCLUDE=""
+# AI watermarks (ERE, case-insensitive) that fail commit messages, PR titles and PR bodies.
+WATERMARK_PATTERN='^[[:space:]]*Co-Authored-By:.*(Claude|Anthropic|Copilot|ChatGPT|OpenAI|Gemini|Codex|Cursor|Aider|Devin)|^[[:space:]]*Claude-Session:|Generated (with|by) \[?(Claude|Copilot|ChatGPT|Codex|Cursor|Gemini)|🤖|claude\.ai/(code|chat)/[^[:space:]]*session'
 SECURITY_SEVERITY="HIGH,CRITICAL"             # what blocks: deps gate, config, image
 CANARY_DIR="tests/security-canary"
 TODO_FILE="TODO.md"
@@ -170,6 +181,8 @@ SKIP_DIRS="node_modules,.dart_tool,build,dist,.venv,.tools,target,bin,obj"
 
 # --- Pinned tools (bump by hand; checksums from the official release files) ----------------------
 MARKDOWNLINT_VERSION="0.24.0"                                                          # markdownlint-cli2 on npm, released 2026-10-21
+VALE_VERSION="3.26.0"                                                                  # released 2026-10-31
+VALE_SHA256="22aa69a556558e4a9dfc63c17030777383d8d3c48dcdfad655fa98e839d666ed"        # vale_3.26.0_Linux_64-bit.tar.gz (vale_3.26.0_checksums.txt)
 GITLEAKS_VERSION="8.30.1"
 GITLEAKS_SHA256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"   # gitleaks_8.30.1_linux_x64.tar.gz
 TRIVY_VERSION="0.76.1"

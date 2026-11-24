@@ -1,0 +1,12 @@
+# Updates of the actions of dev-standard (commit SHA pins with their version comments). A cool-down
+# skips releases younger than 14 days. The pinned scanners and Vale in template/check.config.jinja
+# are bumped by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 14 }
+    commit-message: { prefix: ci }
+    groups:
+      actions: { patterns: ["*"] }

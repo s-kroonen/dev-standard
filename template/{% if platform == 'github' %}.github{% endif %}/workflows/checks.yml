@@ -57,6 +57,12 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: scripts/check pr-title "$PR_TITLE"
+      - name: PR text (writing rule, no AI watermark)
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          scripts/install-tools vale
+          scripts/check pr-text
       - name: Commits
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -184,14 +190,18 @@ jobs:
       - run: scripts/check licenses
 
   docs:
-    # markdownlint-cli2 (pinned in check.config) and relative links; no network for the links.
+    # markdownlint-cli2 (pinned in check.config), relative links (no network) and the writing rule
+    # (Vale, docs/process/writing.md). A pull request reads the changed files only; a push and the
+    # weekly run read everything.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - run: scripts/check docs
+      - run: scripts/install-tools vale
+      - run: scripts/check docs ${BASE_REF:+"origin/$BASE_REF"}
 
   workflows:
     # Security lint of the CI definitions themselves (template injection, risky triggers, credentials).

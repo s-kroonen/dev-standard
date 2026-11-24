@@ -1,169 +1,159 @@
-# PLAN — remaining fix-plan items (after the high pass and the small items)
+# PLAN — writing rule with Vale, central AI attribution, checks on the standard itself
 
-Goal: a project generated from this template needs little change once code arrives. Everything
-that depends on the codebase becomes **instructions in the generated repo** (a playbook, TODO
-items, a skill) that a person or an agent follows, plus **checks that notice when a step is still
-undecided**. Research is **continuing work** with its own guardrails, revisited after the first
-working build.
+The previous plan (stack-layer playbook, research guardrails, process, security) is built; its
+results are in `TODO.md` (STD-8 to STD-80) and in git history.
 
-Scope: this repository. The standard is generic: no project names or project-specific rules.
+Three changes, one build:
 
-Status of each item stays in `TODO.md`; this file says how to build them.
+- **A. Writing rule**, enforced with Vale (replaces STD-76's open half).
+- **B. Central AI attribution**: no watermarks per commit, PR or doc; the role of AI is described
+  once, in `AGENTS.md` and the README.
+- **C. The standard checks itself**: dev-standard gets its own CI, rules and tests, so a local
+  clone with `gh` can set up the GitHub side and everything is verified on this repository.
 
-## Rules for whoever builds this
+New `TODO.md` rows start at STD-81.
 
-- Edit only files in this repository.
-- Test in the scratchpad: generate projects with
-  `uvx --from copier==9.7.1 copier copy --trust --defaults --vcs-ref HEAD <path-to-dev-standard> <dir> --data stack=<none|python|node|rust> ...`
-  (pinned scanners on PATH, see `template/scripts/install-tools`). `tests/template-tests.sh` runs
-  the whole set.
-- Keep the existing conventions: `scripts/check <stage>` is the single entry point; project
-  commands are data in `check.config` (`""` = undecided, `none` = decided not applicable);
-  waivers are PR labels set by a person; guardrail files are listed in `.guardrails`.
-- Every new check gets a test (a case that fails and one that passes) and, where it is a hook
-  rule, a row in `template/tests/hooks/cases.tsv`.
-- English, short, plain docs. No invented tool versions: pin only versions you looked up, with
-  checksums where binaries are downloaded.
-- At the end: update `TODO.md` statuses, `README.md` (Verified section), and report what was
-  built, what was tested (with output), and what wasn't.
+## Rules for the build
 
-## Phase 1 — "After the first code": the stack-layer playbook
+- Edit only files in this repository. Test in a scratch directory with generated projects
+  (`uvx --from copier==9.7.1 copier copy --trust --defaults --vcs-ref HEAD <this repo> <dir> --data stack=<none|python|node|rust> ...`)
+  and with `tests/template-tests.sh`.
+- No commits. Pin only versions that were looked up (release page + checksum; action SHAs with
+  `git ls-remote`); prefer releases at least 14 days old.
+- Every new check gets a failing and a passing case in `tests/template-tests.sh`; hook rules get
+  rows in `template/tests/hooks/cases.tsv`.
+- Day 0 stays green: a fresh `stack=none` project passes `scripts/check all`, also with `CI=1`.
+- All text written in this build follows the writing rule below.
 
-Items: STD-9, STD-10, STD-17, STD-21, STD-22, STD-23, STD-24, STD-34, STD-37, STD-38, STD-40.
+## A. Writing rule, enforced with Vale
 
-1. `template/docs/process/stack-layer.md.jinja`: an ordered checklist done after the stack
-   decision (ADR 0002 accepted) and again when the codebase grows. Each step: why, when, how per
-   stack (python, node, rust, dotnet, flutter: tool + example command), the `check.config`
-   variable it fills, done-when. Steps:
-   1. Apply the profile: `copier update --trust --data stack=<name>`; project config excludes the
-      canaries (tsconfig include, ruff/eslint excludes); quality canary green (STD-17).
-   2. Architecture boundaries (STD-10): `ARCH_CMD` — import-linter, dependency-cruiser, crate
-      split / cargo-modules, NetArchTest, a Dart import lint. Layers written in an ADR.
-   3. Complexity and duplication (STD-9): `COMPLEXITY_CMD` — ruff `C90`, eslint `complexity` +
-      jscpd, clippy `cognitive_complexity`, .NET analyzers CA1502.
-   4. Performance budget (STD-21): `PERF_CMD` — pytest-benchmark, vitest bench, criterion,
-      BenchmarkDotNet; budgets come from the quality attributes (QA-*).
-   5. UI gates when there is a UI (STD-22): `E2E_CMD` — Playwright incl. axe accessibility; bundle
-      size budget.
-   6. Contracts between parts (STD-23): `CONTRACT_CMD` — OpenAPI/AsyncAPI schema in the repo,
-      schema diff + schemathesis or consumer tests.
-   7. Language-native security tools (STD-34): `SECURITY_NATIVE_CMD` — bandit/pip-audit,
-      npm audit signatures, cargo-deny, `dotnet list package --vulnerable`, `dart pub` + osv.
-   8. Stack SAST rules (STD-40): own opengrep rules + security-canary cases for the stack
-      (e.g. Dart, which has none), the way `stacks/*/rules` were done.
-   9. Fuzzing of untrusted input parsers (STD-37): `FUZZ_CMD` — hypothesis/atheris, fast-check,
-      cargo-fuzz, SharpFuzz; short run in CI, long run weekly.
-   10. Running-app scan (STD-38): `DAST_CMD` — ZAP baseline against the app started in CI, when it
-       serves HTTP.
-   11. Docker: Dependabot `docker` entry, `scripts/check image` in CI.
-   12. Raise `COVERAGE_TOTAL_MIN` to the current total.
-   13. .NET only (STD-24): verify the dotnet profile and add the .NET quality canary.
-2. `check.config.jinja`: the new variables, empty by default, with a comment per variable.
-3. `scripts/check`:
-   - stages `architecture`, `complexity`, `perf`, `e2e`, `contract`, `security-native`, `fuzz`,
-     `dast` (run the command via `step`; skip when `none`);
-   - stage `stack-layer`: once source files exist, every playbook variable must be a command or
-     `none` (with a `# reason` comment). Empty → WARN locally, FAIL in CI. Day 0 (no code) passes;
-   - add the stages to `all` and to both CI files (GitHub `checks.yml`, GitLab).
-4. Seed `TODO.md.jinja`: `<KEY>-5` "Add the stack layer (docs/process/stack-layer.md)" and
-   `<KEY>-6` "Review research after the first working build" (phase 2). Bump "Next free number".
-5. Skill `template/.claude/skills/stack-layer/SKILL.md`: walks the playbook, proposes the
-   `check.config` lines (a guardrail: the agent writes them in the handover/PR; a person applies
-   them or approves with `guardrail-change`).
-6. `AGENTS.md.jinja` and `docs/process/workflow.md.jinja`: link the playbook from the stage line
-   and the day-0 steps. `stacks/README.md`: point to the playbook.
-7. Tests: day-0 project passes `stack-layer`; python project with code and empty vars → FAIL in
-   CI (`CI=1`), WARN locally; with commands/`none` → PASS.
+### A1. The rule (goes into `template/docs/process/writing.md`, summarised in `AGENTS.md`)
 
-## Phase 2 — Research as continuing work, with guardrails
+Applies to docs, code comments, changelog entries, TODO items, PR/MR text, handovers.
 
-Items: STD-44, STD-45, STD-46, STD-47, STD-48, STD-49, STD-50, STD-51, STD-52.
+1. <!-- vale off -->No first or second person: no we, our, us, I, my, you, your. Name the thing: "dev-standard
+   adds…", "The hook blocks…".
+2. Describe what exists, in the present tense: "The `deps` stage fails on…".
+3. Steps use the imperative without "you": "Run `scripts/setup`."
+4. No history in docs or comments: no "now", "new", "no longer", "previously", "updated to",
+   "added by". History lives in git and `CHANGELOG.md`.
+5. Comments explain why, not what. No commented-out code. A TODO in code carries an issue key:
+   `TODO(KEY-12): …`.
+6. No filler or marketing: simply, just, easily, robust, seamless, powerful, comprehensive,
+   leverage, "note that", "it's worth noting"; no emojis, no exclamation marks.
+7. No hedging: "should work", "hopefully". State what is verified and what is not.
+8. Changelog entries describe the product change: "Fixture groups can be renamed".
+9. TODO item titles state the problem or the outcome: "Pan overshoots at the end of a cue".
+10. No AI watermarks in any text (see B).
+11. Commit subjects stay imperative Conventional Commits (`fix(KEY-31): stop pan overshoot`);
+    Vale does not check commit subjects.
+12. Text in another language (domain data) is out of scope; its paths are excluded. <!-- vale on -->
 
-1. `template/docs/research/README.md.jinja`: the one place for research (STD-47). Rules: every
-   note has a header block — Date, Question, Time-box, Status (open / answered / stale),
-   Sources (URL + accessed date), Verified (packages, versions, licences checked against the
-   registry, how), Re-check by (date). Notes older than `RESEARCH_MAX_AGE_DAYS` (90) are re-checked
-   before a decision uses them (STD-52). Research and spikes have a time-box (STD-50).
-2. Templates: `docs/research/note-template.md`; `docs/research/retrospective-template.md` for
-   remakes of an earlier version (STD-44: what worked, what failed, what to keep, data to migrate).
-3. `docs/product/quality-attributes.md`: an "Architecturally significant requirements" section
-   (STD-45) that the stack skills fill and the playbook revisits.
-4. `docs/product/vision.md.jinja` links the assessment instead of repeating problem/concept
-   (STD-46).
-5. Decision template (`docs/decisions/template.md`, `0002-…`): **Evidence** (links to research
-   notes) and **Reversibility** (one-way / two-way door; how to undo) sections (STD-47, STD-51).
-6. `scripts/verify-package <ecosystem> <name> [version]` (STD-48): asks the registry
-   (pypi.org JSON, registry.npmjs.org, crates.io API, api.nuget.org, pub.dev API) and prints:
-   exists, latest version, licence, last release date, maintainers count where available.
-   `/stack-research` and AGENTS rule 7 tell agents to run it for every package they cite.
-7. Spec Kit assess extension (STD-49): find where the URL allow-list lives in the generated
-   project (`.specify/extensions/assess/…`) and add documentation and registry hosts through the
-   preset or a Copier task; if not configurable, document the limit in `docs/research/README.md`.
-8. `scripts/check research` (in `fast`): research notes have the header fields; accepted ADRs
-   link at least one existing research note; a *proposed* ADR that links a note past its
-   re-check date fails (re-check first); open notes past their time-box warn.
-9. Playbook step + `<KEY>-6` TODO item: after the first working build, review research: update
-   the ASRs, write the retrospective if it is a remake, re-run `/stack-concerns` for new concerns,
-   mark stale notes.
-10. Tests for `research`: missing field fails, stale note under a proposed ADR fails, fixed passes.
+### A2. Vale in the template
 
-## Phase 3 — Process and agent workflow
+1. Pin Vale (latest release ≥ 14 days old) in `check.config.jinja` (`VALE_VERSION`,
+   `VALE_SHA256`) and install it in `scripts/install-tools`; macOS/Windows notes like the other
+   tools.
+2. `.vale.ini` + `.vale/styles/DevStandard/*.yml`, shipped in the template, offline (no
+   `vale sync`, no third-party packages by default; document how to add write-good or proselint
+   vendored at a pinned version). Rules:
+   - <!-- vale off -->**error**: `Pronouns` (A1.1), `History` (A1.4), `Filler` (A1.6), `Hedging` (A1.7),
+     `Watermarks` (B: "Co-Authored-By: Claude", "Generated with Claude Code", "🤖", session
+     links), `TodoKey` (A1.5, comments: `TODO` without `(KEY-n)`), `Exclamation`; <!-- vale on -->
+   - <!-- vale off -->**warning**: `SentenceLength` (> 30 words), `Passive` (simple existence pattern),
+     `HeadingCase` (sentence case), `Substitutions` (utilize→use, in order to→to, …); <!-- vale on -->
+   - `config/vocabularies/DevStandard/accept.txt` with project terms (Spec Kit, Copier, lefthook,
+     opengrep, gitleaks, trivy, …); the project adds its own.
+3. Scope in `.vale.ini`: Markdown (`*.md`), source comments for the languages Vale supports
+   (check which: Python, JS/TS, Rust, C#, Go; Dart and shell comments only if supported,
+   otherwise say so in `writing.md`); exclude `tests/*-canary/`, `spikes/`, `.specify/`,
+   `node_modules/`, vendored rules, and a `VALE_EXCLUDE` list from `check.config` for
+   other-language content.
+4. `scripts/check docs`: runs Vale (errors fail, warnings are printed); with a base branch
+   (`scripts/check docs [base]`, used in CI) only changed files; `scripts/check pr-text` reads the
+   PR/MR body from `PR_BODY` (env) and runs Vale on it (`--ext=.md`). Keep the existing
+   markdownlint and link checks in `docs`.
+5. CI: GitHub `checks.yml` and GitLab run `docs` on changed files and `pr-text` on the PR body
+   (passed through `env`, never interpolated into the script — zizmor must stay clean).
+6. Agent feedback (STD-76): PostToolUse hook `lint-file.sh` (or extend `format-file.sh`) runs
+   `LINT_FILE_CMD` (per profile: `ruff check {file}`, `npx eslint {file}`, `cargo clippy` is
+   crate-wide so skip for rust, …) and Vale on edited `.md` files; problems go to stderr with
+   exit 2 so the agent sees them; never blocks the edit itself.
+7. <!-- vale off -->Sweep: every Markdown and `.md.jinja` file in the template, the preset, `stacks/`, and this
+   repository's own `README.md`, `TODO.md` and `PLAN.md` passes the error rules (render the
+   `.jinja` docs in a generated project to lint them; the standard's own CI does the same).
+   Includes "how we work" in `AGENTS.md`, "what we value" in the constitution, every "you" in the
+   README and skills. <!-- vale on -->
+8. `AGENTS.md` hard rule "Writing" (short, links `docs/process/writing.md`); one line in
+   `CLAUDE.md`; handover and PR/MR templates written in the same style.
 
-Items: STD-8, STD-12, STD-13, STD-14, STD-18, STD-19, STD-59, STD-61, STD-64, STD-65.
+## B. Central AI attribution instead of watermarks
 
-1. `scripts/check proof [base]` (STD-8, STD-59): for each `specs/*/spec.md` changed in the PR:
-   the **Issue** field matches the branch's `<KEY>-<n>` (feat/fix branches); the Proof table has
-   no empty "verified by" cells or `TODO`. Run in the CI test-integrity job.
-2. Stop hook runs `scripts/check build` too when `BUILD_CMD` is set (STD-13).
-3. `scripts/check scope [base]` (STD-14): warn-only list of changed files not mentioned in the
-   plan's structure/tasks. Not a gate.
-4. PostToolUse hook `format-file.sh` (STD-18): formats the edited file right away with
-   `FORMAT_FILE_CMD` (per profile: `ruff format {file}`, `prettier --write {file}`,
-   `rustfmt {file}`, `dotnet format --include {file}`, `dart format {file}`); no-op when empty.
-5. Reviewer subagent `template/.claude/agents/quality-reviewer.md` (read-only tools) + skill
-   `/review` (STD-19): checks the diff against spec, plan, constitution and the PR template's
-   agent checklist; output pasted into the PR.
-6. `docs/process/workflow.md.jinja`: parallel work with `git worktree` (one issue per worktree;
-   Spec Kit `feature.json` is per worktree) (STD-61); person↔agent hand-over rule (STD-65:
-   a person may take over any branch; an agent continues only branches it created or is asked
-   to; the TODO Level column records the switch).
-7. Bug escalation (STD-64): preset bug-assess output gets an "Escalation check" section;
-   `pr_size` uses `FIX_MAX_LINES=200` for `fix/` branches and fails when a fix touches
-   `SENSITIVE_PATHS` (check.config) unless the label `large-change` is set.
-8. Docs lint (STD-12): `scripts/check docs`: markdownlint-cli2 (pinned) with a short config and
-   relative-link check (no network); in `all` and CI.
+1. `template/.claude/settings.json`: `"attribution": {"commit": "", "pr": "", "sessionUrl": false}`
+   (Claude Code setting; `includeCoAuthoredBy` is deprecated).
+2. Constitution V (template and preset), `AGENTS.md` rule "Transparency", README "How AI is
+   used": the role of AI per work type is described once, there. No `Co-Authored-By`, session
+   links or "generated with" lines in commits, PRs, code or docs.
+3. Agent work stays traceable without watermarks: agent branches (`claude/`, `ccr-`, the
+   agentic work types), the PR label `agent` (set by the agent workflow and by agents that open
+   PRs: `gh pr create --label agent`), and the bot author of Action commits.
+4. PR/MR templates: drop the "AI use" checkboxes; keep the agent review checklist, titled "PRs
+   labelled `agent`".
+5. <!-- vale off -->`scripts/check commit-msg` fails on watermark trailers (`Co-Authored-By:` naming an AI tool,
+   `Claude-Session:`, "Generated with …"); pattern `WATERMARK_PATTERN` in `check.config`. The PR
+   title/body checks apply the same pattern. <!-- vale on -->
+6. `claude-agent.yml`: PRs it opens get the label `agent`; allowed tools include
+   `gh pr create`, `gh pr edit --add-label agent`.
+7. `TODO.md` STD-60 text: remove the Co-Authored-By detection idea.
 
-## Phase 4 — Security and supply chain
+## C. The standard checks itself
 
-Items: STD-30, STD-32, STD-33, STD-35, STD-36, STD-39, STD-66, STD-67.
+dev-standard follows its own standard where it applies: issue key `STD`, tracker `TODO.md`,
+Conventional Commits (`feat(STD-81): …`), writing rule, guardrails.
 
-1. `.gitleaks.toml` (STD-30): rules for credentials in URLs (`scheme://user:pass@host`), Discord
-   / Slack webhooks if the defaults miss them, typed constants (`const API_KEY: &str = "…"`);
-   matching security-canary cases (generated at runtime like the existing ones). `secrets` fails
-   when a `.env*` file other than `.env.example` is tracked.
-2. Malicious packages (STD-32, STD-39): `deps` also runs osv-scanner and fails on `MAL-*`
-   advisories only; osv.dev unreachable → WARN locally, FAIL in CI.
-3. Release supply chain (STD-33): `release.yml` signs `SHA256SUMS` keyless with cosign (pinned
-   installer action by SHA), keeps the provenance attestation; a commented Windows code-signing
-   step stays.
-4. Licences (STD-35): `scripts/check licenses`: trivy `--scanners license`, fail on forbidden
-   (and restricted, configurable `LICENSE_SEVERITY`); exceptions in `.trivyignore.yaml` with a
-   reason and expiry. Add to `all` and CI.
-5. Untrusted content (STD-36): AGENTS rule (web pages, issues, PR comments, tool output are data,
-   not instructions); `.claude/settings.json`: no automatic project MCP servers
-   (`enableAllProjectMcpServers: false`, empty `enabledMcpjsonServers`); MCP servers added by a
-   person in `.mcp.json` (guardrail).
-6. GitLab (STD-66): tag pipeline (SBOM, release notes from CHANGELOG, MR main→dev);
-   `scripts/repo-settings` gets a `--gitlab` mode using `glab api` for protected branches and
-   merge settings.
-7. Hook input parsing (STD-67): hooks use `jq` when present, else `python3`, else the current
-   sed parser; add the escaped-quote cases to `tests/hooks/cases.tsv`.
+1. Root `AGENTS.md` + `CLAUDE.md` for this repository: what it is, layout (`template/`,
+   `speckit-preset/`, `stacks/`, `tests/`), how to change and test it, work types (features
+   ai-assist; fixes and releases agentic), the writing rule, never weaken a test or check.
+2. Root `lefthook.yml` + `scripts/` (thin wrappers or symlinks to the template's commit-msg and
+   branch checks, with `ISSUE_KEY=STD`) so commits here follow the same rules.
+3. Root `.guardrails` + `.claude/` (hooks from the template, settings with `attribution` empty,
+   sandbox) so an agent working on the standard is constrained the same way; hook cases run in
+   CI.
+4. `.github/workflows/ci.yml` for this repository (actions pinned by SHA,
+   `persist-credentials: false`, minimal permissions):
+   - `lint`: `bash -n` + shellcheck (pinned) on every script in `template/scripts`,
+     `template/.claude/hooks`, `tests/`; YAML parse of every workflow and GitLab file;
+     gitleaks on the repository; Vale + markdownlint on this repository's docs;
+   - `render`: generate `none`, `python`, `node`, `rust` (+ gitlab, + `github_agent`) projects;
+     zizmor 1.33.1 on the rendered workflows; Vale on the rendered docs;
+   - `template-tests`: `tests/template-tests.sh` (installs the pinned scanners via a generated
+     project's `scripts/install-tools`);
+   - `pr-rules`: PR title and commit messages (`ISSUE_KEY=STD`), PR body via `pr-text`;
+   - `result`: the one required check (same pattern as the template), plus a `guardrails` job,
+     so `template/scripts/repo-settings apply` works on this repository unchanged
+     (`GH_REPO=s-kroonen/dev-standard`).
+   - weekly schedule: template tests + `repo-settings verify`.
+5. `.github/dependabot.yml` for this repository's actions (cool-down 14 days).
+6. Root README section "Working on dev-standard": clone, `scripts/setup`, run the tests,
+   `scripts/repo-settings apply` once (needs `gh` with admin rights), release by tag `v<x.y.z>`
+   (`copier update` uses the tags).
 
-## Phase 5 — Verify and document
+## D. Tests (in `tests/template-tests.sh` and the repository CI)
 
-1. Generate `none`, `python`, `node`, `rust` projects; run `scripts/check all` plus every new
-   stage on passing and failing cases; `scripts/check hooks`; zizmor 1.33.1 on the workflows;
-   YAML-validate every workflow and the GitLab file.
-2. Update `TODO.md` (status per item), `README.md` (what a project gets, Verified),
-   `stacks/README.md`.
-3. Report: built, tested (commands + results), not verified, follow-ups as new `STD-` items.
+- A planted doc with each error rule fails `docs`; the fixed doc passes; `<!-- vale off -->`
+  works; a warning-only doc passes with output.
+- <!-- vale off -->A Python (and TS) comment with "we" fails when Vale supports that language. <!-- vale on -->
+- <!-- vale off -->`pr-text` fails on a body with "you" or a watermark, passes a clean body. <!-- vale on -->
+- <!-- vale off -->`commit-msg` rejects a `Co-Authored-By: Claude…` trailer and a `Claude-Session:` line, accepts
+  a plain message. <!-- vale on -->
+- Generated `settings.json` contains the empty `attribution`.
+- The lint-file hook reports a Vale error for an edited Markdown file (exit 2 + stderr) and
+  stays silent on a clean file.
+- Day-0 `scripts/check all` green locally and with `CI=1`; node, python, rust projects green.
+- The repository's own checks (C4 lint and render jobs) run locally and pass.
+
+## E. Finish
+
+- `TODO.md`: rows STD-81 onwards for A, B, C (status per row), STD-76 updated; next free number.
+- `README.md`: what a project gets (writing rule, Vale, attribution), Verified section.
+- Report: built, tested (commands + results), not verified, deviations from this plan.

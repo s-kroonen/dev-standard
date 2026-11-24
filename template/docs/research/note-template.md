@@ -9,7 +9,7 @@
 - **Verified**: <packages, versions, licences checked against the registry, with `scripts/verify-package` output and the date>
 - **Re-check by**: <YYYY-MM-DD, at most 90 days after Date>
 
-## What we found
+## Findings
 
 - <finding> ([source](https://example.org), read YYYY-MM-DD) (confidence: high / medium / low) | ASSUMPTION
 

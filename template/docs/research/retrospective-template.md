@@ -8,7 +8,7 @@ one), and keep it up to date: later decisions link it as evidence.
 - **Time-box**: <4h | 2 days>
 - **Status**: <open | answered | stale>
 - **Sources**: <old repository at commit <sha>, user feedback, issue tracker, URLs with the date read>
-- **Verified**: <what you checked in the old code or data, how, and when>
+- **Verified**: <what was checked in the old code or data, how, and when>
 - **Re-check by**: <YYYY-MM-DD, at most 90 days after Date>
 
 ## The old version
@@ -21,7 +21,7 @@ What it is, who used it, the repository and commit, how to run it.
 
 Include known defects: security, safety, data loss.
 
-## What we learned
+## Lessons
 
 ## Knowledge only in people's heads or the code
 

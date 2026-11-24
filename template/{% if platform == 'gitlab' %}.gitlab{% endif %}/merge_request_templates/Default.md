@@ -5,7 +5,7 @@ Closes:
 
 ## What and why
 
-<!-- 2–5 sentences. What changes for a user, admin or developer, and why. -->
+<!-- 2–5 sentences, present tense, no first or second person (docs/process/writing.md). What changes for a user, admin or developer, and why. -->
 
 ## Acceptance criteria
 
@@ -15,15 +15,8 @@ Closes:
 ## How it was verified
 
 - [ ] `scripts/check all` passes locally
-- [ ] Manual check: <what you tried, on which device/environment>
+- [ ] Manual check: <what was tried, on which device or environment>
 - Not verified / known gaps: <say so, or "none">
-
-## AI use
-
-<!-- Pick one. This is disclosure, not a judgement. -->
-- [ ] None
-- [ ] Assisted: AI suggested or drafted parts; I reviewed and edited every line I commit
-- [ ] Agent-authored: an agent wrote this change; session/run link: <link>
 
 ## Risk
 

@@ -6,6 +6,7 @@
 # binding gate is CI (guardrails check) plus a protected branch. Needs bash, grep and sed (jq or
 # python3 when present, see parse-input.sh).
 
+# shellcheck disable=SC2034  # read by the sourced parse-input.sh
 input="$(cat)"
 # shellcheck source=parse-input.sh
 source "$(dirname "${BASH_SOURCE[0]}")/parse-input.sh" || { echo "Blocked: .claude/hooks/parse-input.sh is missing." >&2; exit 2; }
@@ -58,6 +59,8 @@ grep -qE -- "$writes" <<<"$scan" || exit 0
 for p in "${patterns[@]}"; do
     core="${p#^}"
     core="${core%\$}"
+    # A directory pattern (trailing slash) also matches the bare directory name: rm -rf .vale
+    if [[ "$core" == */ ]]; then core="${core%/}(/|[[:space:]\"';|&)]|\$)"; fi
     if grep -qE -- "(^|[[:space:]\"'=:(<>]|\./|/)${core}" <<<"$scan"; then
         echo "Blocked: this command writes to a path that $msg Reading it (cat, grep, git diff) is fine." >&2
         exit 2

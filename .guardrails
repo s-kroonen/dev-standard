@@ -1,0 +1,24 @@
+# Guardrail files of dev-standard: the files that check or constrain changes to this repository.
+# Only a human maintainer changes them. One extended regular expression per line, matched against
+# repo-relative paths. Read by .claude/hooks/protect-paths.sh (blocks agent edits) and by the CI job
+# `guardrails` (reads this list from the target branch, so a change cannot switch it off).
+# template/, speckit-preset/, stacks/ and tests/template-tests.sh are the product and its test: normal work.
+
+# Agent configuration and rules
+^\.claude/
+^AGENTS\.md$
+^CLAUDE\.md$
+^\.mcp\.json$
+
+# CI
+^\.github/
+
+# The checks of this repository, their configuration and the hook cases
+^scripts/
+^check\.config$
+^lefthook\.yml$
+^\.vale\.ini$
+^\.markdownlint-cli2\.jsonc$
+^tests/hooks/
+^CODEOWNERS$
+^\.guardrails$

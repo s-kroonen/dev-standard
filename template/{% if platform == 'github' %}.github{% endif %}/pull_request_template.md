@@ -5,7 +5,7 @@ Closes:
 
 ## What and why
 
-<!-- 2–5 sentences. What changes for a user, admin or developer, and why. -->
+<!-- 2–5 sentences, present tense, no first or second person (docs/process/writing.md). What changes for a user, admin or developer, and why. -->
 
 ## Acceptance criteria
 
@@ -15,25 +15,19 @@ Closes:
 ## How it was verified
 
 - [ ] `scripts/check all` passes locally
-- [ ] Manual check: <what you tried, on which device/environment>
+- [ ] Manual check: <what was tried, on which device or environment>
 - Not verified / known gaps: <say so, or "none">
 
-## AI use
+## PRs labelled `agent`
 
-<!-- Pick one. This is disclosure, not a judgement. -->
-- [ ] None
-- [ ] Assisted: AI suggested or drafted parts; I reviewed and edited every line I commit
-- [ ] Agent-authored: an agent wrote this change; session/run link: <link>
-
-## Agent PR review (agent-authored PRs)
-
-<!-- The reviewer ticks these; CI covers what it can (test-integrity, new-deps, pr-size, guardrails). -->
-- [ ] Every requirement has proof (spec Proof table or handover), and I checked one myself
+<!-- The label marks agent work (set by the agent workflow or by the agent that opened the PR).
+     The reviewer ticks these; CI covers what it can (test-integrity, new-deps, pr-size, guardrails). -->
+- [ ] Every requirement has proof (spec Proof table or handover), and the reviewer checked one personally
 - [ ] Tests not weakened; a bug fix has a test that fails without the fix
-- [ ] Scope matches the plan/issue; nothing unrelated (follow-ups listed instead)
-- [ ] New dependencies: named in the plan/ADR, real, maintained, licence fits
+- [ ] Scope matches the plan or issue; nothing unrelated (follow-ups listed instead)
+- [ ] New dependencies: named in the plan or ADR, real, maintained, licence fits
 - [ ] Security & Data section of the spec still holds (input, secrets, personal data, safety)
-- [ ] Handover read: what wasn't verified is acceptable or has an issue
+- [ ] Handover read: what was not verified is acceptable or has an issue
 
 ## Risk
 

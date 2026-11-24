@@ -90,22 +90,35 @@ licenses:
     - scripts/install-tools
     - scripts/check licenses
 
-# markdownlint-cli2 (pinned in check.config) needs Node; relative links need nothing.
+# markdownlint-cli2 (pinned in check.config) needs Node; relative links need nothing. Vale (the
+# writing rule, docs/process/writing.md) reads the changed files of a merge request, everything
+# otherwise.
 docs:
   stage: check
   image: node:22-bookworm-slim
+  variables: { GIT_DEPTH: "0" }
   before_script:
-    - command -v git >/dev/null || (apt-get update -qq && apt-get install -y -qq git >/dev/null)
-  script: [scripts/check docs]
+    - command -v curl git >/dev/null || (apt-get update -qq && apt-get install -y -qq curl git ca-certificates >/dev/null)
+    - scripts/install-tools vale
+  script:
+    - if [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" ]; then git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"; scripts/check docs "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"; else scripts/check docs; fi
 
-# Squash commits take the MR title: it must be a Conventional Commit with the issue key.
+# Squash commits take the MR title: it must be a Conventional Commit with the issue key, and the
+# title and description carry no AI watermark and follow the writing rule. GitLab cuts
+# CI_MERGE_REQUEST_DESCRIPTION at 2700 characters.
 mr-rules:
   stage: check
-  variables: { GIT_DEPTH: "0" }
+  variables:
+    GIT_DEPTH: "0"
+    PR_BODY: $CI_MERGE_REQUEST_DESCRIPTION
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  before_script:
+    - command -v curl git >/dev/null || (apt-get update -qq && apt-get install -y -qq curl git ca-certificates >/dev/null)
+    - scripts/install-tools vale
   script:
     - scripts/check pr-title "$CI_MERGE_REQUEST_TITLE"
+    - scripts/check pr-text
 
 build:
   extends: .toolchain
