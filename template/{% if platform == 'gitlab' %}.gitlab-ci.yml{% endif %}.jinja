@@ -165,7 +165,15 @@ guardrails:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-    - git show "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME:.guardrails" | grep -vE '^[[:space:]]*(#|$)' > /tmp/patterns
+    - |
+      if ! git cat-file -e "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME:.guardrails" 2>/dev/null; then
+        git show "HEAD:.guardrails" 2>/dev/null | grep -vE '^[[:space:]]*(#|$)' > /tmp/patterns || true
+        adds="$(git diff --name-only "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"...HEAD | grep -Ef /tmp/patterns || true)"
+        echo "The target branch has no .guardrails: there are no guardrail files yet, so nothing is checked."
+        echo "Files that become guardrail files with this MR:"; echo "${adds:-none}"
+        exit 0
+      fi
+    - git show "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME:.guardrails" | grep -vE '^[[:space:]]*(#|$)' > /tmp/patterns || true
     - hits="$(git diff --name-only "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"...HEAD | grep -Ef /tmp/patterns || true)"
     - if [ -z "$hits" ]; then echo "No guardrail files changed."; exit 0; fi
     - echo "Guardrail files changed:"; echo "$hits"

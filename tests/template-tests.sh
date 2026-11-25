@@ -139,6 +139,58 @@ expect "gitlab: the CI file parses" 0 uvx --from pyyaml==6.0.4 python -I -c 'imp
 expect "gitlab: no AI-use checkbox in the MR template" 1 grep -q 'AI use' .gitlab/merge_request_templates/Default.md
 )
 
+echo "== guardrails job: a base branch without .guardrails passes with a notice, one with a list stays strict"
+# The job's script is extracted from the workflow file and run against a throwaway repository, so the
+# test runs the code that CI runs. jobscript <file> <github|gitlab> prints it.
+jobscript() {
+    uvx --from pyyaml==6.0.4 python -I -c 'import sys, yaml
+d = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+if sys.argv[2] == "gitlab":
+    print("\n".join(d["guardrails"]["script"]))
+else:
+    steps = d["jobs"]["guardrails"]["steps"]
+    print([s["run"] for s in steps if "run" in s][0])' "$1" "$2"
+}
+# gj_repo <dir> <base has .guardrails: yes|no>: main has README.md (and .guardrails); the PR changes secret.txt
+gj_repo() {
+    rm -rf "$1"; mkdir -p "$1"
+    (
+    cd "$1" || exit 1
+    git init -q -b main
+    printf 'x\n' > README.md; printf 'old\n' > secret.txt
+    [[ "$2" == yes ]] && printf '# guarded\n^secret\\.txt$\n' > .guardrails
+    git add -A; G commit -q -m base
+    git switch -q -c pr
+    printf 'new\n' > secret.txt
+    [[ "$2" == no ]] && printf '# guarded\n^secret\\.txt$\n' > .guardrails
+    git add -A; G commit -q -m change
+    )
+}
+gj_run() { # <dir> <script file> <approved> <mode: github|gitlab>
+    (
+    cd "$1" || exit 1
+    if [[ "$4" == gitlab ]]; then
+        git remote add origin "$1" 2>/dev/null   # the job runs `git fetch origin <target>`: the repository is its own origin
+        CI_MERGE_REQUEST_TARGET_BRANCH_NAME=main CI_MERGE_REQUEST_LABELS="$3" bash -e "$2"
+    else
+        RUNNER_TEMP="$1/tmp" BASE="$(git rev-parse main)" HEAD="$(git rev-parse pr)" APPROVED="$3" bash -e "$2"
+    fi
+    )
+}
+for kind in "github:$here/.github/workflows/ci.yml" "github:none/.github/workflows/guardrails.yml" "gitlab:gl/.gitlab-ci.yml"; do
+    mode="${kind%%:*}"; file="${kind#*:}"; label="${file##*/}"; [[ "$label" == ci.yml ]] && label="ci.yml of this repository"
+    jobscript "$file" "$mode" > "$work/guard.sh"
+    approved_no=false; approved_yes=true
+    if [[ "$mode" == gitlab ]]; then approved_no=""; approved_yes="guardrail-change"; fi
+    gj_repo "$work/gj-no" no; mkdir -p "$work/gj-no/tmp"
+    expect "guardrails ($label): no .guardrails on the base passes" 0 gj_run "$work/gj-no" "$work/guard.sh" "$approved_no" "$mode"
+    expect_out "guardrails ($label): the output names the file that becomes a guardrail" "secret\.txt" gj_run "$work/gj-no" "$work/guard.sh" "$approved_no" "$mode"
+    expect_out "guardrails ($label): the output says there are no guardrail files yet" "no guardrail files yet" gj_run "$work/gj-no" "$work/guard.sh" "$approved_no" "$mode"
+    gj_repo "$work/gj-yes" yes; mkdir -p "$work/gj-yes/tmp"
+    expect "guardrails ($label): a guardrail file changed on a base with a list fails" 1 gj_run "$work/gj-yes" "$work/guard.sh" "$approved_no" "$mode"
+    expect "guardrails ($label): the label allows it" 0 gj_run "$work/gj-yes" "$work/guard.sh" "$approved_yes" "$mode"
+done
+
 echo "== this repository: its own checks, hooks and files"
 expect "repo: scripts/lint passes" 0 bash -c "cd '$here' && scripts/lint"
 expect "repo: scripts/check docs passes (writing rule on README, TODO, PLAN, preset, stacks, template docs)" 0 bash -c "cd '$here' && scripts/check docs"
