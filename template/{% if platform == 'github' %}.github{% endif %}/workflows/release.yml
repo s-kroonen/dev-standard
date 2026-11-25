@@ -39,7 +39,7 @@ jobs:
         run: |
           mkdir -p release
           trivy fs --quiet --format cyclonedx --output release/sbom.cdx.json .
-          if [ -n "$ASSETS" ]; then cp $ASSETS release/; fi
+          if [ -n "$ASSETS" ]; then read -ra assets <<<"$ASSETS"; cp "${assets[@]}" release/; fi
           (cd release && sha256sum -- * > SHA256SUMS)
       - name: Install cosign
         uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3

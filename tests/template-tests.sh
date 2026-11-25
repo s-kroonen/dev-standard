@@ -139,6 +139,19 @@ expect "gitlab: the CI file parses" 0 uvx --from pyyaml==6.0.4 python -I -c 'imp
 expect "gitlab: no AI-use checkbox in the MR template" 1 grep -q 'AI use' .gitlab/merge_request_templates/Default.md
 )
 
+echo "== scripts/lint: actionlint runs shellcheck on the run blocks of workflows"
+lw="$work/lint-wf"; rm -rf "$lw"; mkdir -p "$lw/scripts" "$lw/.github/workflows" "$lw/template"
+cp "$here/scripts/lint" "$lw/scripts/lint"; : > "$lw/template/{% if platform == 'gitlab' %}.gitlab-ci.yml{% endif %}.jinja"
+printf 'name: t\non: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo "ok"\n' > "$lw/.github/workflows/t.yml"
+(cd "$lw" && git init -q -b main && git add -A)
+expect "lint: a clean workflow passes" 0 bash -c "cd '$lw' && CI=1 scripts/lint"
+printf '          if grep -q x file; then echo '"'"'unterminated\n          fi\n' >> "$lw/.github/workflows/t.yml"
+(cd "$lw" && git add -A)
+expect "lint: a workflow with a broken run block (open quote) fails" 1 bash -c "cd '$lw' && CI=1 scripts/lint"
+printf 'name: t\non: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          for f in $(ls); do echo $f; done\n          [ -n "$X" ] && echo $Y\n' > "$lw/.github/workflows/t.yml"
+(cd "$lw" && git add -A)
+expect "lint: an unquoted expansion in a run block fails" 1 bash -c "cd '$lw' && CI=1 scripts/lint"
+
 echo "== guardrails job: a base branch without .guardrails passes with a notice, one with a list stays strict"
 # The job's script is extracted from the workflow file and run against a throwaway repository, so the
 # test runs the code that CI runs. jobscript <file> <github|gitlab> prints it.

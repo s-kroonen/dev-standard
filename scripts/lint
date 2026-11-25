@@ -19,6 +19,15 @@ if command -v shellcheck >/dev/null 2>&1; then
 elif [[ -n "${CI:-}" ]]; then echo "FAIL shellcheck is not installed (scripts/install-tools shellcheck)"; rc=1
 else echo "WARN shellcheck is not installed: scripts/install-tools shellcheck"; fi
 
+# Workflows: actionlint runs shellcheck on every run: block (a quoting error in a block fails here, not
+# after the push). Rendered template workflows (*.jinja) are linted by the CI job `render`.
+mapfile -d '' workflows < <(git ls-files -z --cached --others --exclude-standard -- '.github/workflows/*.yml' 'template/*workflows/*.yml')
+if command -v actionlint >/dev/null 2>&1 && command -v shellcheck >/dev/null 2>&1; then
+    actionlint "${workflows[@]}" || rc=1
+    echo "actionlint $(actionlint -version | head -n1): ${#workflows[@]} workflows"
+elif [[ -n "${CI:-}" ]]; then echo "FAIL actionlint or shellcheck is not installed (scripts/install-tools actionlint shellcheck)"; rc=1
+else echo "WARN actionlint is not installed: scripts/install-tools actionlint"; fi
+
 # YAML: plain files only (a *.jinja file with template tags is parsed after rendering).
 mapfile -d '' yaml < <(git ls-files -z --cached --others --exclude-standard -- '.github/workflows/*.yml' '.github/dependabot.yml' 'template/*workflows/*.yml' 'template/*codeql/*.yml')
 yaml+=("template/{% if platform == 'gitlab' %}.gitlab-ci.yml{% endif %}.jinja")
