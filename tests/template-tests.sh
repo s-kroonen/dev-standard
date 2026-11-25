@@ -9,6 +9,10 @@
 #
 # osv.dev is not needed: the malicious-package gate is tested with a stub osv-scanner.
 set -uo pipefail
+# The suite is independent of the CI it runs in: scripts/check reads these variables, and the cases
+# that test CI mode set CI=1 themselves.
+unset CI GITHUB_ACTIONS GITHUB_HEAD_REF GITHUB_BASE_REF GITLAB_CI CI_COMMIT_REF_NAME
+for v in $(compgen -v | grep '^CI_MERGE_REQUEST_'); do unset "$v"; done
 here="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$here/.tools/bin:$PATH"   # pinned tools from scripts/setup (same as CI)
 work="${1:-$(mktemp -d)}"; mkdir -p "$work"; cd "$work" || exit 1
