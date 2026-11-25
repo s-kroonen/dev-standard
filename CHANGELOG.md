@@ -40,6 +40,9 @@ each breaking change ships a Copier migration or an upgrade note.
 
 ### Fixed
 
+- `scripts/update-rules`, `scripts/setup`, `scripts/install-tools`, `scripts/repo-settings` and
+  `scripts/next-version` work outside a git repository, so a task never aborts an update that
+  runs in a temporary copy.
 - The synced constitution copy is current after `copier update`.
 - A relative `_src_path` stops `scripts/update-standard` with the fix; the README examples use
   `gh:<owner>/dev-standard`.
@@ -49,8 +52,11 @@ each breaking change ships a Copier migration or an upgrade note.
 - A Copier migration moves the project's values from `check.config` into `project.config` and
   restores `check.config`. Review `project.config` and the diff of `check.config` in the PR.
   Edited pinned-tool versions in `check.config` are dropped.
-- The first update from v0.1.0 or v0.2.0 runs with plain `copier update --trust --defaults
-  --conflict inline --vcs-ref v0.3.0`; `scripts/update-standard` exists from v0.3.0 on.
+- The first update from v0.1.0 or v0.2.0 runs with `copier update --trust --defaults --skip-tasks
+  --conflict inline --vcs-ref v0.3.0`, then `scripts/post-update`; `scripts/update-standard`
+  exists from v0.3.0 on. A plain update without `--skip-tasks` runs the `scripts/update-rules` of
+  the old release in a temporary copy that is not a git repository, and on bash 5.3 (Ubuntu 26.04)
+  it stops with "cd: null directory". The migration still runs with `--skip-tasks`.
 - Shared files gain a marker line. A project that appended its own text at the end of `CLAUDE.md`,
   `lefthook.yml`, `.gitignore` or `CODEOWNERS` resolves one conflict there: its text goes below the
   marker.

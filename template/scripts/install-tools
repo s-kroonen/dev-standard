@@ -12,7 +12,7 @@
 # Versions and checksums live in check.config. Bump them by hand (release notes, new checksum);
 # Dependabot (.github/dependabot.yml) covers actions and packages, not these.
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 source ./check.config
 
 [[ "$(uname -s)-$(uname -m)" == "Linux-x86_64" ]] || { echo "Linux x86_64 only; use Homebrew or Docker here." >&2; exit 1; }

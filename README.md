@@ -163,9 +163,11 @@ versions in between, files with conflict markers, changed guardrail files, wheth
 `scripts/repo-settings apply` is needed, `scripts/check fast`, and the commit message. The skill
 `/update-standard` does the same for an agent. The update is mechanical; the PR review is the gate.
 
-A project older than v0.3.0 makes its first jump with plain `copier update --trust --defaults
---conflict inline --vcs-ref v0.3.0`: a Copier migration moves the project's values from
-`check.config` into `project.config` and runs the post steps.
+A project older than v0.3.0 makes its first jump with `copier update --trust --defaults --skip-tasks
+--conflict inline --vcs-ref v0.3.0`, then `scripts/post-update`: a Copier migration moves the
+project's values from `check.config` into `project.config` (migrations run with `--skip-tasks`).
+Without `--skip-tasks`, the old release's `scripts/update-rules` runs in a temporary copy that is
+not a git repository; on bash 5.3 its `cd ""` fails and the update stops.
 
 Verified Copier 9.7.1 behaviour that the design rests on (evidence in `tests/update-tests.sh` and
 below):
@@ -248,7 +250,7 @@ Not verified in this pass: `ci.yml` and the `docs` and `pr-rules` jobs on a real
 Clean-updates pass (2026-11-25; `tests/template-tests.sh`: 167 cases, all pass; `tests/update-tests.sh`: 156 cases, all pass; Copier 9.7.1, with Vale, gitleaks, trivy, opengrep and shellcheck on PATH):
 
 - Updates to the working tree (tagged `v0.3.0` in a scratch clone) from `v0.2.0` for the stacks `none`, `python` and `node`, and from `v0.1.0` for `none` and `python`: no conflict markers, project files byte-identical (README, TODO, product vision, decision records, project opengrep rule, project Vale term, `docs/security-exceptions.md`), project sections of `AGENTS.md` and `CONSTITUTION.md` and the `.guardrails` project line kept, constitution copy in sync, `_commit` and an absolute `_src_path` kept, the standard files (`scripts/`, hooks, workflows, `check.config`, `DevStandard` style, canary README, `docs/process/`) equal to a fresh render, `scripts/check all` green locally and with `CI=1` for `none`, and the static gates (research, secrets, sast, config, canary, hooks, docs) green for `python` and `node`.
-- From `v0.1.0` and `v0.2.0` the migration moves the project's edited `COVERAGE_TOTAL_MIN`, `VALE_EXCLUDE` and `ARCH_CMD` from `check.config` into `project.config` and restores `check.config`; the first jump uses plain `copier update` (no `scripts/update-standard` yet).
+- From `v0.1.0` and `v0.2.0` the migration moves the project's edited `COVERAGE_TOTAL_MIN`, `VALE_EXCLUDE` and `ARCH_CMD` from `check.config` into `project.config` and restores `check.config`; the first jump uses `copier update --skip-tasks` and `scripts/post-update` (no `scripts/update-standard` yet).
 - Second hop in a scratch clone (a synthetic release after the candidate that changes a standard file, `AGENTS.md` above its marker, `check.config`, the Spec Kit preset and the changelog): `scripts/update-standard` creates `chore/TST-10-update-dev-standard`, prints the upgrade note, the guardrail files, the commit message and "no repo-settings change", installs the changed preset again, keeps the project's lines below the markers and `project.config`, and `scripts/check all` is green; a dirty tree and `main` are refused (exit 2); a relative `_src_path` stops with the fix.
 - Release rules: a section without upgrade notes fails, a renamed standard file that the notes do not name fails, the real changelog passes.
 - Adoption: a repository with a README, a CI file and a `package.json` takes `copier copy --overwrite`; the three files stay byte-identical, the standard's workflows sit next to the existing CI file, `scripts/check fast` runs.

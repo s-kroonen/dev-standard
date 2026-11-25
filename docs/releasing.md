@@ -33,6 +33,12 @@ set by the maintainer.
 
 ## What the update test needs
 
+The update from a release before v0.3.0 uses the documented first jump (`copier update --skip-tasks`,
+then `scripts/post-update`). A plain update from v0.2.0 fails on GitHub runners (bash 5.3) and passes
+in older containers (bash 5.2): bash 5.3 treats `cd ""` as an error, and the old `scripts/update-rules`
+runs it in Copier's temporary copy, which has no git repository. The test shows that case with a
+`BASH_ENV` file that gives bash 5.2 the 5.3 behaviour, so it fails the same way everywhere.
+
 The previous release and v0.1.0 must exist as tags. `tests/update-tests.sh` clones this repository,
 commits the working tree in the clone and tags that commit with the version of the top
 `CHANGELOG.md` section, so the real repository gets no tag from the test.

@@ -52,7 +52,11 @@ The report lists:
 - the result of `scripts/check fast`;
 - the commit message `chore(<KEY-n>): update dev-standard to vX.Y.Z`.
 
-A plain `copier update --trust --vcs-ref <tag>` stays correct: a Copier migration runs
+A project generated before v0.3.0 makes its first jump with `copier update --trust --defaults
+--skip-tasks --conflict inline --vcs-ref <tag>`, then `scripts/post-update`: the tasks of the old
+release run in a temporary copy without git, and on bash 5.3 they stop the update.
+
+A plain `copier update --trust --vcs-ref <tag>` from v0.3.0 on stays correct: a Copier migration runs
 `scripts/post-update` after the merge. It does not run the Spec Kit preset, `scripts/setup` or the
 report.
 

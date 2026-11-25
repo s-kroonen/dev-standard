@@ -44,7 +44,12 @@ expect_out() { # <name> <regex> <command...>
     else echo "FAIL $name (no match for: $re)" | tee -a "$res"; sed 's/^/       /' <<<"$out" | tail -n 14; fi
 }
 commit_all() { (cd "$1" && git add -A && G commit -q --no-verify -m "${2:-init}" && git update-ref refs/remotes/origin/dev HEAD); }
-copier() { uvx --quiet --from copier==9.7.1 copier "$@"; }
+copier_cmd=(uvx --quiet --from copier==9.7.1 copier)
+copier() { "${copier_cmd[@]}" "$@"; }
+# bash 5.3 treats `cd ""` as an error ("cd: null directory"); bash 5.2 does not. BASH_ENV applies it to every script.
+cat > "$work/bash5.3.sh" <<'EOS'
+cd() { if [ "$#" -ge 1 ] && [ -z "$1" ]; then echo "${BASH_SOURCE[1]:-bash}: line ${BASH_LINENO[0]}: cd: null directory" >&2; return 1; fi; builtin cd "$@"; }
+EOS
 
 # --- the scratch clone: previous releases as tags, the working tree as the candidate -----------------
 src="$work/src"
@@ -162,10 +167,22 @@ run_update() { # <name> <base tag> <stack>
         [[ $rc -eq 0 ]] || { echo "   (update-standard exit $rc)"; strip <<<"$out" | tail -n 25 | sed 's/^/       /'; }
         expect "$name: update-standard worked on branch chore/TST-9-update-dev-standard" 0 test "$(git -C "$d" rev-parse --abbrev-ref HEAD)" = "chore/TST-9-update-dev-standard"
     else
-        # releases before v0.3.0 have no scripts/update-standard: the first jump is a plain copier update
-        out="$(cd "$d" && copier update --trust --defaults --conflict inline --vcs-ref "$cand" 2>&1)"; rc=$?
-        expect "$name: plain copier update succeeds" 0 test "$rc" -eq 0
+        # releases before v0.3.0 have no scripts/update-standard: the first jump is the documented one
+        # (README.md, CHANGELOG.md Upgrade notes): copier update --skip-tasks, then scripts/post-update
+        if [[ ! -e "$work/plain-update-shown" ]]; then
+            : > "$work/plain-update-shown"
+            # bash 5.3 (GitHub runners) fails on cd ""; the old scripts/update-rules runs it in Copier's
+            # temporary copy without git. bash5.3.sh gives an older bash that behaviour.
+            cp -a "$d" "$d-plain"
+            out="$(cd "$d-plain" && env BASH_ENV="$work/bash5.3.sh" "${copier_cmd[@]}" update --trust --defaults --conflict inline --vcs-ref "$cand" 2>&1)"; rc=$?
+            expect "$name: a plain update from $base fails on bash 5.3 (so the docs name --skip-tasks)" 0 test "$rc" -ne 0
+            expect_out "$name: the plain update stops with 'null directory'" "null directory" echo "$out"
+            rm -rf "$d-plain"
+        fi
+        out="$(cd "$d" && env BASH_ENV="$work/bash5.3.sh" "${copier_cmd[@]}" update --trust --defaults --skip-tasks --conflict inline --vcs-ref "$cand" 2>&1)"; rc=$?
+        expect "$name: copier update --skip-tasks succeeds (also on bash 5.3)" 0 test "$rc" -eq 0
         [[ $rc -eq 0 ]] || strip <<<"$out" | tail -n 25 | sed 's/^/       /'
+        expect "$name: scripts/post-update succeeds" 0 bash -c "cd '$d' && scripts/post-update"
     fi
     (
     cd "$d" || exit 1

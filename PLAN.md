@@ -1,145 +1,80 @@
-# PLAN — clean updates from dev-standard to projects
+# PLAN — fixes from the first CI run (PR #1)
 
-The previous plans (stack-layer playbook, research, process, security, writing rule, AI
-attribution, checks on this repository) are built; their results are in `TODO.md` and in git
-history.
-
-Goal: a new dev-standard version reaches a project with one command, without merge conflicts in a
-project that only edits its own parts, with written upgrade notes for anything manual, and with a
-CI test in this repository that proves it for every release.
-
-Findings from the first update test (v0.1.0 → v0.2.0, python project with local edits):
-
-- The three-way merge kept local edits in `AGENTS.md` and `README.md`; 39 files updated, 4 added,
-  no conflicts.
-- The synced constitution copy was stale after the update: `check fast` failed until
-  `scripts/sync-constitution` ran.
-- A project generated from a relative path (`./dev-standard`) stores that path in
-  `.copier-answers.yml`; `copier update` then stops with "Updating is only supported in
-  git-tracked templates".
-
-New `TODO.md` rows are added as `STD-?` (a person numbers them).
+The first run of `ci.yml` on GitHub (run 45634911818) failed in 11 of 13 jobs. The causes, in
+fix order. Each fix lands as its own commit on `ccr-44b516ef-bl8xmk`; the push re-runs CI on
+PR #1.
 
 ## Rules for the build
 
-The rules of `AGENTS.md` hold. In short: edit only this repository, no commits, look up every
-pinned version, a failing and a passing test per new check, day 0 stays green (also with
-`CI=1`), the writing rule applies to all text, guardrail files change only with a note for the
-owner in the handover.
+The rules of `AGENTS.md` hold: verified versions only, a failing and a passing case per check,
+the writing rule for all text, no AI watermark in commits. Commit messages pass
+`scripts/check commit-msg`. Guardrail files of this repository may change for these fixes (the
+owner asked for them); the report lists each one.
 
-## A. File ownership: the base for conflict-free updates
+## 1. Update from v0.1.0 and v0.2.0 aborts (update-test, 34 failures)
 
-1. Three classes of files in a generated project, listed in
-   `template/docs/process/updating.md` and in the README:
-   - **Standard files**: replaced by every update, guardrails, never edited in the project
-     (`scripts/`, `.claude/hooks/`, the workflows, `.vale/styles/DevStandard/`, the canaries,
-     `tests/hooks/cases.tsv`, `.opengrep/rules/custom/`).
-   - **Project files**: written once at generation, never touched by an update. Listed in
-     `copier.yml` under `_skip_if_exists` (verify the behaviour on update): `README.md`,
-     `CHANGELOG.md`, `TODO.md`, `docs/product/`, `docs/decisions/0002-*`, `docs/research/` notes,
-     `project.config`, the project extension points below.
-   - **Shared files**: merged by Copier (`AGENTS.md`, `CLAUDE.md`, `CONSTITUTION.md`,
-     `.guardrails`, `lefthook.yml`, `.gitignore`). Each ends with one marked project section
-     (`<!-- project rules: below this line -->` or `# project: below this line`); the standard
-     never edits below the marker, so merges stay clean.
-2. Split `check.config`:
-   - `check.config`: standard file (rules, pinned tools, stack profile defaults); replaced by
-     updates;
-   - `project.config`: project file, sourced after `check.config` by `scripts/check`,
-     `scripts/setup` and the hooks; holds the project's overrides (commands, coverage
-     thresholds, playbook variables `ARCH_CMD` …, `VALE_EXCLUDE`, extra rules). A guardrail like
-     `check.config`.
-   - A Copier migration moves the values of the old `# >>> project` section into
-     `project.config` for projects generated before this change (verify how `_migrations` with a
-     version runs).
-3. Project extension points that updates never touch: `.opengrep/rules/project/`,
-   `.vale/styles/Project/` and its vocabulary, `tests/hooks/project-cases.tsv` (run by
-   `scripts/check hooks` after the standard cases).
+Cause: a plain `copier update` from v0.1.0 or v0.2.0 runs the old template's tasks in Copier's
+temporary copy, which is not a git repository; the old `scripts/update-rules` exits with
+"not a git repository" and Copier stops. Everything after it fails as a result (constitution
+copy, `_commit`, `project.config`, the fresh-render comparison, `scripts/check all`).
 
-## B. One update command in every project
+The same test passes in this development container. That difference is a finding in itself.
 
-`scripts/update-standard <KEY-n> [--to vX.Y.Z]` (standard file, guardrail):
+1. Find why it passes here and fails on GitHub (environment, git config, temporary directory,
+   Copier behaviour). Reproduce the GitHub failure locally, for example with a clean environment
+   (`env -i HOME=… PATH=…`). Record the cause in the report and in `docs/releasing.md` if it
+   affects how updates are tested.
+2. The supported first jump from v0.1.0/v0.2.0: `copier update --trust --defaults --skip-tasks
+   --conflict inline --vcs-ref <tag>`, then `scripts/post-update` (which exists after the jump).
+   Put it in the v0.3.0 Upgrade notes of `CHANGELOG.md` and in the update docs.
+3. `tests/update-tests.sh` uses exactly that documented path for old releases, and keeps one
+   negative case that shows a plain update from v0.2.0 fails in a clean environment (so the
+   docs stay true).
+4. `template/scripts/update-rules` (and any task script) works outside a git repository, so a
+   future version's tasks never abort an update the same way.
 
-1. Preconditions: clean working tree; refuses on `main`; creates
-   `chore/<KEY-n>-update-dev-standard` from `dev`.
-2. Reads `_src_path` and `_commit` from `.copier-answers.yml`. A relative or unreachable source
-   stops with the fix (set `_src_path` to `gh:<owner>/dev-standard`).
-3. Runs the pinned Copier (`COPIER_VERSION` in `check.config`):
-   `copier update --trust --defaults --conflict inline --vcs-ref <tag>` (latest tag by default).
-4. Post-steps: `scripts/sync-constitution`; the Spec Kit preset again when `speckit-preset/`
-   changed between the two tags; `scripts/setup` (new pinned tools); `scripts/update-rules` when
-   `OPENGREP_RULES_COMMIT` changed.
-5. Report: the upgrade notes from the standard's `CHANGELOG.md` between the two tags, files with
-   conflict markers, changed guardrail files (the PR needs `guardrail-change`), whether
-   `scripts/repo-settings apply` is needed (labels or required checks changed), the result of
-   `scripts/check fast`, and the commit message
-   `chore(<KEY-n>): update dev-standard to vX.Y.Z`.
-6. Plain `copier update` also stays correct: a Copier task or migration runs
-   `scripts/sync-constitution` after the merge (test which one runs after the files are
-   written).
-7. Skill `/update-standard` for agents: runs the script, resolves conflicts only inside project
-   sections, never edits standard files, writes the handover with the report.
-8. Work type in `AGENTS.md.jinja`: "Standard update", commit type `chore`, branch
-   `chore/<KEY-n>-update-dev-standard`, level from a new Copier question `update_level`
-   (default `agentic`: the update is mechanical and the PR review is the gate).
+## 2. guardrails job fails when the base branch has no `.guardrails` (guardrails job)
 
-## C. Notice of a new version
+Cause: `main` is v0.1.0 and has no root `.guardrails`; `git show "$BASE:.guardrails"` fails.
+Adoption of an existing repository meets the same case.
 
-`scripts/check standard-version` (weekly CI job, never blocks): compares `_commit` with the
-newest `v*` tag of `_src_path` (`git ls-remote --tags`) and prints the versions in between with
-their upgrade notes. Follow-up row (not in this build): a weekly workflow that runs the update and
-opens a PR labelled `agent`.
+1. In `.github/workflows/ci.yml` and the template's `guardrails.yml` (and the GitLab job): no
+   list on the base branch means "no guardrails yet": pass with a notice that names the files the
+   PR adds as guardrails. A list on the base branch keeps the current strict behaviour.
+2. A test for both cases (in `tests/template-tests.sh` or a script the job calls).
 
-## D. Releasing dev-standard
+## 3. Render step has a quoting error and a check that cannot fail (render, 5 jobs)
 
-1. Root `CHANGELOG.md`, one section per version: Added, Changed, Fixed, **Upgrade notes**
-   (manual steps, renamed or removed files and variables, new labels, new required checks, new
-   tools). Sections for v0.1.0 and v0.2.0 written from git history.
-2. Semver for the standard: a renamed or removed standard file or variable, a new required check,
-   or a new manual step is breaking (major, minor while 0.x). Each breaking change ships a Copier
-   migration or an upgrade note; `tests/update-tests.sh` fails when a release has neither.
-3. Release workflow for this repository on tag `v*`: GitHub release with the `CHANGELOG.md`
-   section (same pattern as the template's `release.yml`).
-4. `docs/releasing.md` (or a README section): version from `scripts/next-version`, changelog with
-   upgrade notes, tag by a person, release.
-5. `_min_copier_version` in `copier.yml`.
+Cause: `ci.yml` step "No Jinja left, YAML parses" misses a closing quote (`'./.opengrep/*`);
+bash stops before the check runs. The first line `! grep … | grep .` never fails under
+`bash -e`.
 
-## E. Update test in CI (the guarantee)
+1. Fix the quote; rewrite the Jinja check as `if grep …; then …; exit 1; fi`.
+2. Add actionlint (pinned, checksum, at least 14 days old) to `scripts/install-tools` and
+   `scripts/lint`; it runs shellcheck on every `run:` block of this repository's workflows and of
+   rendered template workflows. A planted broken `run:` block fails `scripts/lint`.
+3. Look for other `! cmd` lines under `bash -e` in workflows and scripts; fix them the same way.
 
-`tests/update-tests.sh`, a `ci.yml` job `update-test`:
+## 4. Tests pick up the CI environment (template-tests, 7 failures)
 
-1. In a scratch clone: tag the previous release (or the base given), commit the working tree as a
-   temporary release candidate tag.
-2. For `stack` none, python and node: generate from the previous release, commit, apply a set of
-   typical project edits (project sections of the shared files, `project.config`, own README,
-   TODO items, a decision record, a project opengrep rule, a project Vale term).
-3. Run `scripts/update-standard` to the candidate.
-4. Assert: no conflict markers; project files byte-identical; project sections kept; constitution
-   in sync; `_commit` updated; `scripts/check all` green on day 0 (also `CI=1`).
-5. A second run from v0.1.0 (the oldest supported version) to the candidate, with the migration
-   for `project.config`.
+Cause: GitHub sets `CI=true` and `GITHUB_HEAD_REF`/`GITHUB_BASE_REF`; `scripts/check` reads
+them, so the "local mode" cases run in CI mode and branch-based cases (pr-size on `fix/`,
+the proof issue key) see the PR branch.
 
-## F. Adopting a repository that did not start from the standard
+1. `tests/template-tests.sh` and `tests/update-tests.sh` unset `CI`, `GITHUB_ACTIONS`,
+   `GITHUB_HEAD_REF`, `GITHUB_BASE_REF`, `GITLAB_CI` and the `CI_MERGE_REQUEST_*` variables at
+   the start; cases that test CI mode set `CI=1` themselves (they already do).
+2. Prove it: run both suites locally with `CI=true GITHUB_HEAD_REF=ccr-x GITHUB_BASE_REF=main`
+   exported; they pass.
 
-1. `docs/adopting.md` in this repository: run `copier copy --trust gh:<owner>/dev-standard .` on a
-   new branch; project files that exist are kept (`_skip_if_exists`); existing CI files stay
-   next to the standard's; a list of what to merge by hand (existing CI, lint configs, README
-   sections, branch names, commit history that breaks the commit rule).
-2. A test in `tests/update-tests.sh`: adopt into a sample repository with a README, a CI file
-   and a `package.json`; assert the README and CI file are untouched and `scripts/check fast`
-   runs.
+## 5. PR body watermark (pr-rules)
 
-## G. Docs
+The GitHub tool that opened PR #1 appended a footer line that names the AI tool.
+The check worked. The PR body is edited outside this build (not a file in the repository).
 
-1. Template: `docs/process/updating.md` (ownership classes, the update command, conflicts,
-   labels), a line in `AGENTS.md.jinja` commands and work types, a short README section.
-2. This repository's README: "Updating a project", "Adopting an existing repository",
-   "Releasing dev-standard"; generation examples use `gh:<owner>/dev-standard`, never a local
-   path.
-3. `TODO.md`: the `STD-?` rows of this plan with status; README "Verified".
+## 6. Finish
 
-## H. Finish
-
-Run `tests/template-tests.sh` and `tests/update-tests.sh`, `scripts/lint`, `scripts/check docs`,
-zizmor on every workflow. Report what was built, the test results, what is not verified, and the
-deviations from this plan.
+- Run `scripts/lint`, `scripts/check docs`, `tests/template-tests.sh`, and
+  `tests/update-tests.sh` (with the CI variables exported, see 4.2) before each push.
+- `TODO.md`: one `STD-?` row per cause, status done or open.
+- Push to `ccr-44b516ef-bl8xmk`; then read the new CI run of PR #1 and report each job's result.
