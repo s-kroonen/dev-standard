@@ -2,7 +2,7 @@
 #
 # Claude Code PostToolUse hook: formats the file the agent just wrote or edited, so the agent sees
 # formatted code right away (and the `format` check at the end finds nothing to complain about).
-# FORMAT_FILE_CMD in check.config, with {file} for the path (empty or "none": does nothing).
+# FORMAT_FILE_CMD in check.config or project.config, with {file} for the path (empty or "none": does nothing).
 # Never blocks: a formatter that fails or is missing is reported on stderr and the edit stands.
 # Afterwards lint-file.sh runs on the same input (sequentially: the lint reads the formatted file).
 
@@ -14,7 +14,7 @@ source "$here/parse-input.sh" || exit 0
 root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 [[ -f "$root/check.config" ]] || exit 0
 
-cmd_tpl="$(bash -c 'source "$1/check.config" 2>/dev/null; echo "${FORMAT_FILE_CMD:-}"' _ "$root")"
+cmd_tpl="$(bash -c 'cd "$1" && source ./check.config 2>/dev/null; [[ -f project.config ]] && source ./project.config 2>/dev/null; echo "${FORMAT_FILE_CMD:-}"' _ "$root")"
 if [[ -n "$cmd_tpl" && "$cmd_tpl" != none ]]; then
     while IFS= read -r path; do
         [[ -z "$path" ]] && continue

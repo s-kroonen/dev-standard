@@ -91,6 +91,7 @@
         "./CLAUDE.md",
         "./scripts",
         "./check.config",
+        "./project.config",
         "./.guardrails",
         "./CODEOWNERS",
         "./lefthook.yml",

@@ -3,7 +3,7 @@
 # Claude Code PostToolUse hook, started by format-file.sh: lints the file the agent just wrote or
 # edited and reports problems on stderr with exit 2, so the agent sees them and fixes them. The
 # edit itself stands (a PostToolUse hook cannot undo it).
-#   1. LINT_FILE_CMD in check.config, with {file} for the path (empty or "none": skipped).
+#   1. LINT_FILE_CMD in check.config or project.config, with {file} for the path (empty or "none": skipped).
 #   2. The writing rule (docs/process/writing.md): Vale on Markdown and source comments, through
 #      `scripts/check docs-file`; skipped without Vale, out-of-scope paths are skipped by the check.
 # Silent (exit 0) when the file is clean.
@@ -16,7 +16,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/parse-input.sh" || exit 0
 root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 [[ -f "$root/check.config" ]] || exit 0
 
-cmd_tpl="$(bash -c 'source "$1/check.config" 2>/dev/null; echo "${LINT_FILE_CMD:-}"' _ "$root")"
+cmd_tpl="$(bash -c 'cd "$1" && source ./check.config 2>/dev/null; [[ -f project.config ]] && source ./project.config 2>/dev/null; echo "${LINT_FILE_CMD:-}"' _ "$root")"
 problems=""
 while IFS= read -r path; do
     [[ -z "$path" ]] && continue

@@ -1,11 +1,11 @@
 ---
 name: stack-layer
-description: "Walk the stack-layer playbook (docs/process/stack-layer.md) after the stack decision is accepted and when the codebase grows. Finds what is still undecided, proposes the check.config lines, and says which gates are proven. Use after /stack-decide was accepted, or when `scripts/check stack-layer` warns."
+description: "Walk the stack-layer playbook (docs/process/stack-layer.md) after the stack decision is accepted and when the codebase grows. Finds what is still undecided, proposes the project.config lines, and says which gates are proven. Use after /stack-decide was accepted, or when `scripts/check stack-layer` warns."
 ---
 
 # Stack layer
 
-`check.config` and the CI files are guardrail files: the agent does not edit them. It finds what is
+`project.config`, `check.config` and the CI files are guardrail files: the agent does not edit them. It finds what is
 missing, proposes the exact lines, and a person applies them (or approves the PR with the label
 `guardrail-change`). Read `docs/process/stack-layer.md` first; it is the checklist.
 
@@ -21,7 +21,7 @@ missing, proposes the exact lines, and a person applies them (or approves the PR
    - not needed: propose `VAR="none"   # reason`.
    Every tool named is verified on its registry first (`scripts/verify-package`); only looked-up
    versions are pinned.
-4. **Write the proposal** as a block of `check.config` lines in the handover or the PR (and CI
+4. **Write the proposal** as a block of `project.config` lines in the handover or the PR (and CI
    changes as a diff). The guardrail files stay untouched.
 5. **Prove the gates.** For each added gate, add the case it must fail on to the plan (a person adds
    it to `tests/`); the quality canary and security canary stay green.

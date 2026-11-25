@@ -295,6 +295,18 @@ jobs:
           ENABLE_CODEQL: ${{ vars.ENABLE_CODEQL }}
         run: scripts/repo-settings verify | tee -a "$GITHUB_STEP_SUMMARY"
 
+  standard-version:
+    # Weekly: is a newer dev-standard out? Prints its upgrade notes. Never fails; an update is a PR
+    # that scripts/update-standard prepares (docs/process/updating.md).
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/check standard-version | tee -a "$GITHUB_STEP_SUMMARY"
+
   # The one required status check. Skipped jobs count as passed; failed or cancelled ones don't.
   result:
     if: always()

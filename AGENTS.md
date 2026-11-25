@@ -13,6 +13,8 @@ The README describes the product; this file states how to change it.
 | `speckit-preset/` | The Spec Kit preset `dev-standard` (constitution, spec and plan templates, commands) |
 | `stacks/` | Source and test notes of the stack profiles: custom security rules, canary cases |
 | `tests/template-tests.sh` | Generates projects and checks that every stage passes and fails where it should |
+| `tests/update-tests.sh`, `migrations/` | Update test (previous release and v0.1.0 to the working tree, adoption) and the Copier migrations run on update |
+| `CHANGELOG.md`, `docs/` | One section per version with Upgrade notes; `docs/releasing.md`, `docs/adopting.md` |
 | `scripts/`, `check.config`, `lefthook.yml`, `.claude/`, `.github/`, `.vale.ini`, `.guardrails` | The checks of this repository: wrappers around `template/scripts/` with `ISSUE_KEY=STD` |
 | `TODO.md` | The tracker: `STD-<n>` items |
 
@@ -62,6 +64,7 @@ scripts/lint                        # bash -n, shellcheck, YAML parse
 scripts/check docs                  # markdownlint, relative links, Vale
 scripts/check hooks                 # tests/hooks/cases.tsv against the root hooks
 tests/template-tests.sh <workdir>   # generated projects: every stage passes and fails where expected
+tests/update-tests.sh <workdir>     # releases update projects without conflicts (env TAG_MAP bootstraps missing tags in a scratch clone)
 scripts/repo-settings apply         # rulesets, labels (needs gh with admin rights; GH_REPO=s-kroonen/dev-standard)
 ```
 
@@ -78,6 +81,7 @@ uvx --from copier==9.7.1 copier copy --trust --defaults --vcs-ref HEAD . /tmp/p 
 
 - [ ] The change works in a generated project (`stack=none` stays green, also with `CI=1`).
 - [ ] `tests/template-tests.sh` passes, and the new behaviour has a failing and a passing case.
+- [ ] `tests/update-tests.sh` passes; a breaking change has a migration or an entry under Upgrade notes in `CHANGELOG.md`.
 - [ ] `scripts/lint` and `scripts/check docs` pass.
 - [ ] Docs and `TODO.md` follow the change; pinned versions are looked up.
 - [ ] The handover says what was not verified and why.

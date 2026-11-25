@@ -5,6 +5,8 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 source ./check.config
+# shellcheck source=/dev/null
+[[ -f project.config ]] && source ./project.config
 
 if [[ "$(uname -s)-$(uname -m)" == "Linux-x86_64" ]]; then scripts/install-tools; fi
 export PATH="$PWD/.tools/bin:$PATH"

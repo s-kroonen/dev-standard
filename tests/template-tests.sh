@@ -186,16 +186,16 @@ echo "-- stack-layer"
 expect "stack-layer: empty variables WARN locally (exit 0)" 0 scripts/check stack-layer
 expect_out "stack-layer: ... and say so" "WARN stack-layer: 8 undecided" scripts/check stack-layer
 expect "stack-layer: empty variables FAIL in CI" 1 env CI=1 scripts/check stack-layer
-for v in ARCH COMPLEXITY PERF E2E CONTRACT SECURITY_NATIVE FUZZ DAST; do sed -i "s/^${v}_CMD=\"\"\$/${v}_CMD=\"none\"/" check.config; done
+for v in ARCH COMPLEXITY PERF E2E CONTRACT SECURITY_NATIVE FUZZ DAST; do sed -i "s/^${v}_CMD=\"\"\$/${v}_CMD=\"none\"/" project.config; done
 expect "stack-layer: none without a reason FAILs in CI" 1 env CI=1 scripts/check stack-layer
-for v in ARCH COMPLEXITY PERF E2E CONTRACT SECURITY_NATIVE FUZZ DAST; do sed -i "s/^${v}_CMD=\"none\"\$/${v}_CMD=\"none\"   # test: not applicable/" check.config; done
+for v in ARCH COMPLEXITY PERF E2E CONTRACT SECURITY_NATIVE FUZZ DAST; do sed -i "s/^${v}_CMD=\"none\"\$/${v}_CMD=\"none\"   # test: not applicable/" project.config; done
 expect "stack-layer: none with a reason PASSes in CI" 0 env CI=1 scripts/check stack-layer
-sed -i 's/^COMPLEXITY_CMD=.*/COMPLEXITY_CMD="uv run ruff check --select C901 --config '"'"'lint.mccabe.max-complexity=10'"'"' src"/' check.config
+sed -i 's/^COMPLEXITY_CMD=.*/COMPLEXITY_CMD="uv run ruff check --select C901 --config '"'"'lint.mccabe.max-complexity=10'"'"' src"/' project.config
 expect "complexity: simple code passes" 0 scripts/check complexity
 python3 -c "print('def f(x: int) -> int:\n' + ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(15)) + '    return 0')" > src/t/complex.py
 expect "complexity: a 16-branch function fails" 1 scripts/check complexity
 rm src/t/complex.py
-git checkout -q check.config
+git checkout -q project.config
 
 echo "-- research"
 mkdir -p docs/research
@@ -340,6 +340,58 @@ sed -i 's/2099-01-01/2026-01-01/' .trivyignore.yaml
 expect "node: ... fails again when the exception expired" 1 scripts/check licenses
 )
 else echo "skip node tests (no npm)"; fi
+
+echo "== project.config, markers, update-standard preconditions, standard-version"
+(
+cd none || exit 1
+expect "project.config exists and is a guardrail file" 0 bash -c "test -f project.config && grep -qF '^project\\.config\$' .guardrails"
+expect "project.config is in CODEOWNERS and the sandbox denyWrite list" 0 bash -c "grep -q '^/project.config' CODEOWNERS && jq -e '.sandbox.filesystem.denyWrite | index(\"./project.config\")' .claude/settings.json"
+expect "check.config holds no project values" 1 grep -qE '^(COVERAGE_TOTAL_MIN|VALE_EXCLUDE|ARCH_CMD)=' check.config
+expect "project.config holds the coverage thresholds, VALE_EXCLUDE and the playbook variables" 0 bash -c "grep -q '^COVERAGE_TOTAL_MIN=' project.config && grep -q '^VALE_EXCLUDE=' project.config && grep -q '^ARCH_CMD=' project.config"
+expect "markers: every shared file has a project marker" 0 bash -c "grep -q 'project rules: below this line' AGENTS.md && grep -q 'project rules: below this line' CLAUDE.md && grep -q 'project principles: below this line' CONSTITUTION.md && for f in .guardrails lefthook.yml .gitignore CODEOWNERS; do grep -q '^# project: below this line' \$f || exit 1; done"
+expect "project.config overrides check.config in scripts/check" 0 bash -c "printf 'LINT_CMD=\"echo from-project-config\"\n' >> project.config && out=\$(scripts/check fast 2>&1); git checkout -q project.config; grep -q from-project-config <<<\"\$out\""
+printf 'FORMAT_FILE_CMD="touch {file}.fmt"\n' >> project.config
+echo x > fmt-probe.txt
+hookf() { echo "{\"tool_input\":{\"file_path\":\"$PWD/fmt-probe.txt\"}}" | CLAUDE_PROJECT_DIR=$PWD bash .claude/hooks/format-file.sh; }
+expect "format-file hook reads FORMAT_FILE_CMD from project.config" 0 bash -c "$(declare -f hookf); hookf; test -f fmt-probe.txt.fmt"
+rm -f fmt-probe.txt fmt-probe.txt.fmt; git checkout -q project.config
+printf '2\tdev\tbash\tgit status\n' >> tests/hooks/project-cases.tsv
+expect "hooks: a wrong project case fails scripts/check hooks" 1 scripts/check hooks
+git checkout -q tests/hooks/project-cases.tsv
+printf '0\tchore/TST-9-update-dev-standard\tbash\tgit commit -m "chore(TST-9): update dev-standard to v1.0.0"\n2\tchore/TST-9-other\tbash\tgit commit -m "docs: x"\n' >> tests/hooks/project-cases.tsv
+expect_out "hooks: the update branch is an agent branch, another chore branch is not" "PASS hooks" scripts/check hooks
+git checkout -q tests/hooks/project-cases.tsv
+echo "-- update-standard preconditions"
+expect "update-standard: no issue -> exit 2" 2 scripts/update-standard
+expect "update-standard: a wrong key -> exit 2" 2 scripts/update-standard APP-1
+cp -r . "$work/none-rel" 2>/dev/null
+( cd "$work/none-rel" && sed -i 's|^_src_path: .*|_src_path: ./dev-standard|' .copier-answers.yml
+  expect_out "update-standard: a relative _src_path is named" "is './dev-standard', a relative path" scripts/update-standard TST-1
+  expect_out "update-standard: ... and the fix is given" "set _src_path in .copier-answers.yml to gh:<owner>/dev-standard" scripts/update-standard TST-1
+  expect "update-standard: ... exit 2" 2 scripts/update-standard TST-1 )
+rm -rf "$work/none-rel"
+expect_out "standard-version: reads the source and says so (never fails)" "standard|standard-version" scripts/check standard-version
+expect "standard-version: exit 0" 0 scripts/check standard-version
+)
+
+echo "== release rules of tests/update-tests.sh: a release without upgrade notes fails"
+rr="$work/rr"; rm -rf "$rr"; cp -a "$here" "$rr" 2>/dev/null
+RR() { (cd "$rr" && RELEASE_RULES_ONLY=1 TAG_MAP="v0.1.0=ce35080 v0.2.0=db58a20" tests/update-tests.sh "$work/rr-work"); }
+if git -C "$here" rev-parse -q --verify ce35080 >/dev/null && git -C "$here" rev-parse -q --verify db58a20 >/dev/null; then
+    expect "release rules: the real CHANGELOG passes" 0 RR
+    python3 - "$rr/CHANGELOG.md" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+s = re.sub(r"### Upgrade notes\n.*?(?=\n## v0\.2\.0)", "### Upgrade notes\n\n", s, count=1, flags=re.S)
+open(p, "w").write(s)
+PY
+    expect "release rules: empty Upgrade notes fail" 1 RR
+    (cd "$here" && git show HEAD:CHANGELOG.md > /dev/null 2>&1); cp "$here/CHANGELOG.md" "$rr/CHANGELOG.md"
+    git -C "$rr" mv template/scripts/sync-constitution template/scripts/sync-constitution-renamed 2>/dev/null || mv "$rr/template/scripts/sync-constitution" "$rr/template/scripts/sync-constitution-renamed"
+    expect "release rules: a renamed standard file that the notes do not name fails" 1 RR
+else echo "skip release-rule tests (history without the v0.1.0 and v0.2.0 commits)"; fi
+rm -rf "$rr" "$work/rr-work"
 
 echo "== hooks cases (jq, python3 and sed parsers)"
 (cd py && expect_out "hooks: all parsers" "PASS hooks \([0-9]+ cases x 3 parsers: sed python jq\)" scripts/check hooks)

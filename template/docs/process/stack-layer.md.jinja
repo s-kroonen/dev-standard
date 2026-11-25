@@ -4,10 +4,10 @@ Run this after the stack decision is **accepted** (`docs/decisions/0002-choose-t
 again when the codebase grows (another part, another kind of input, a UI). Order matters: later
 steps need the gates of the earlier ones. The agent skill `/stack-layer` walks the list.
 
-How it is enforced: every variable below lives in `check.config`. Each is a **command** or
+How it is enforced: every variable below lives in `project.config` (the standard's `check.config` is replaced by updates). Each is a **command** or
 `"none"` with a reason on the same line (`E2E_CMD="none"   # no UI`). While source files exist and a
 variable is empty, `scripts/check stack-layer` warns locally and **fails in CI**. Day 0 (no code)
-passes. `check.config` is a guardrail file: a person changes it (agents propose the lines).
+passes. `project.config` is a guardrail file: a person changes it (agents propose the lines).
 
 The commands below are **examples, not pinned**: look up the current version of every tool
 (`scripts/verify-package <ecosystem> <name>`), pin it in the lockfile or the command, and run the
@@ -205,7 +205,7 @@ command once before relying on it. Paths are placeholders for the project's own.
   control); confirm that `dotnet test` with zero tests fails the test-count check, that
   `TreatWarningsAsErrors` makes the lint gate fail, and that the coverage file path is right.
 - **Done when:** `scripts/check quality-canary` passes with all cases, and the profile's comment in
-  `check.config` has lost the UNVERIFIED note.
+  `check.config` (stack profile) has lost the UNVERIFIED note; the profile belongs to the standard, so a person reports the result to dev-standard.
 
 ## 14. Review the research (after the first working build)
 

@@ -101,6 +101,30 @@ jobs:
           echo "$RUNNER_TEMP/tools/.tools/bin" >> "$GITHUB_PATH"
       - run: tests/template-tests.sh "$RUNNER_TEMP/work"
 
+  update-test:
+    # tests/update-tests.sh: projects of the previous release and of v0.1.0 (stack none, python, node)
+    # update to this commit without conflicts, project files stay byte-identical, the checks are green
+    # afterwards; a repository that did not start from the standard is adopted. The release tags
+    # come from the repository; TAG_MAP creates a missing one in the scratch clone only (drop an
+    # entry once its tag is pushed).
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      TAG_MAP: "v0.1.0=ce35080 v0.2.0=db58a20"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install the pinned scanners
+        run: |
+          uvx --from copier==9.7.1 copier copy --trust --defaults --vcs-ref HEAD . "$RUNNER_TEMP/tools" \
+            --data project_name=T --data issue_key=TST --data stack=none
+          (cd "$RUNNER_TEMP/tools" && scripts/install-tools)
+          echo "$RUNNER_TEMP/tools/.tools/bin" >> "$GITHUB_PATH"
+      - run: tests/update-tests.sh "$RUNNER_TEMP/update-work"
+
   pr-rules:
     # Commits and PR title are Conventional Commits with the key STD; the title becomes the squash
     # commit. The PR body follows the writing rule and carries no AI watermark.
@@ -174,7 +198,7 @@ jobs:
   # The one required status check. Skipped jobs count as passed; failed or cancelled ones do not.
   result:
     if: always()
-    needs: [lint, render, template-tests, pr-rules]
+    needs: [lint, render, template-tests, update-test, pr-rules]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

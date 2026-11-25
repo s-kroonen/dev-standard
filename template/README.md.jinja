@@ -53,7 +53,7 @@ Every check runs through `scripts/check`: the git hooks, the AI agent and CI cal
 | `scripts/check fast` | constitution in sync, format, lint, typecheck, secrets in staged files |
 | `scripts/check test` | tests |
 | `scripts/check research` | research notes dated and verified; decisions cite evidence (in `fast`) |
-| `scripts/check stack-layer` | after the first code: every playbook command in `check.config` decided |
+| `scripts/check stack-layer` | after the first code: every playbook command in `project.config` decided |
 | `scripts/check licenses` | forbidden and restricted licences (trivy) |
 | `scripts/check docs` | markdownlint, relative links and the writing rule (Vale) |
 | `scripts/check pr-text` | the PR or MR body (env `PR_BODY`) against the writing rule and the watermark ban |
@@ -63,6 +63,8 @@ Every check runs through `scripts/check`: the git hooks, the AI agent and CI cal
 | `scripts/check sast` | static security analysis (opengrep) |
 | `scripts/check config` | Dockerfile / IaC misconfiguration (trivy) |
 | `scripts/check canary` | the scanners still find the planted bugs in `tests/security-canary/` |
+| `scripts/check standard-version` | is a newer dev-standard out? prints its upgrade notes (never fails) |
+| `scripts/update-standard <{{ issue_key }}-n>` | new version of dev-standard on its own branch, with a report |
 | `scripts/check all` | all of the above |
 
 ## How AI is used
@@ -71,6 +73,7 @@ AI tools (mainly Claude Code{% if use_speckit %}, with [GitHub Spec Kit](https:/
 
 - **Features ({{ feature_level }}):** {% if feature_level == 'ai-assist' %}AI helps write specs, plans, code and tests on request. A person reviews and edits every change and makes every commit.{% else %}an agent specs, builds and commits on its own branch and opens a pull request; a person approves the plan and merges.{% endif %}
 - **Bug fixes ({{ bug_level }}):** {% if bug_level == 'agentic' %}an agent finds the cause, fixes it with a regression test on its own branch and opens a pull request; a person reviews and merges. Bugs touching design, security, data or hardware safety go to a person.{% else %}AI helps find and fix; a person commits.{% endif %}
+- **Standard updates ({{ update_level }}):** {% if update_level == 'agentic' %}an agent runs `scripts/update-standard` on a branch and opens a pull request with the report; the update is mechanical, a person reviews and merges.{% else %}a person runs `scripts/update-standard`, with AI help for conflicts.{% endif %}
 - **Releases ({{ release_level }}):** {% if release_level == 'agentic' %}an agent computes the version from the commits and prepares the changelog on a release branch; a person merges and tags.{% else %}a person releases, with AI help for the changelog.{% endif %}
 
 Commits, pull requests, code and docs carry no AI watermark (no `Co-Authored-By` trailer naming a
@@ -85,6 +88,9 @@ listed in [`.guardrails`](.guardrails).
 Versions follow [Semantic Versioning](https://semver.org/), computed from the commit types
 (`scripts/next-version`). See [CHANGELOG.md](CHANGELOG.md).
 
----
-Set up from [dev-standard](https://example.invalid/dev-standard) <!-- replace with the template's URL -->.
-Update with `copier update --trust`.
+## Updating the standard
+
+Set up from dev-standard (`_src_path` in `.copier-answers.yml`). A new version arrives with
+`scripts/update-standard {{ issue_key }}-<n>`: standard files are replaced, shared files are merged, project files
+stay as they are. `project.config` holds this project's settings; `check.config` belongs to the
+standard. Details: [`docs/process/updating.md`](docs/process/updating.md).

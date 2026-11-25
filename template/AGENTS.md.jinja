@@ -17,6 +17,7 @@ The constitution states the values; this file states the working rules.
 | Feature | `feat` | `feat/{{ issue_key }}-<n>-<slug>` | **{{ feature_level }}** | {% if feature_level == 'agentic' %}specs, plans, builds, commits and pushes its branch, opens the PR{% else %}helps write the spec, plan, code and tests in the working tree; doesn't commit{% endif %} | {% if feature_level == 'agentic' %}approves the plan, reviews and merges{% else %}creates the branch, reviews and edits every line, commits, opens and merges the PR{% endif %} |
 | Bug fix | `fix` | `fix/{{ issue_key }}-<n>-<slug>` | **{{ bug_level }}** | {% if bug_level == 'agentic' %}assesses the cause, fixes it with a regression test, commits and pushes its branch, opens the PR; escalates (see below){% else %}assesses and proposes the fix in the working tree; doesn't commit{% endif %} | {% if bug_level == 'agentic' %}reviews and merges; takes over escalated bugs{% else %}reviews, commits and merges{% endif %} |
 | Release | `chore(release)` | `release/v<x.y.z>` | **{{ release_level }}** | {% if release_level == 'agentic' %}computes the version (`scripts/next-version`), writes the changelog, commits on the release branch, opens the PR{% else %}prepares version and changelog in the working tree{% endif %} | reviews, merges to `main`, **tags** `v<x.y.z>`; the tag runs `release.yml` (SBOM, release notes, back-merge PR to `dev`) |
+| Standard update | `chore` | `chore/{{ issue_key }}-<n>-update-dev-standard` | **{{ update_level }}** | {% if update_level == 'agentic' %}runs `scripts/update-standard` (a person runs it when the sandbox refuses writes to guardrail files), resolves conflicts only inside project sections, commits and pushes the branch, opens the PR with the report{% else %}runs `scripts/update-standard` in the working tree and gives the report; doesn't commit{% endif %} | {% if update_level == 'agentic' %}reviews the PR (the update is mechanical, the review is the gate), merges, runs `scripts/repo-settings apply` when the report says so{% else %}reviews, commits, opens and merges the PR{% endif %} |
 | Docs, chore, refactor | `docs`, `chore`, `refactor` | `chore/{{ issue_key }}-<n>-<slug>` | **ai-assist** | edits in the working tree | commits |
 | Spike (throwaway experiment) | — | `spike/{{ issue_key }}-<n>-<slug>`, code in `spikes/` | **agentic** | writes and commits throwaway code on the spike branch; copies findings into `docs/research/` | reads the findings; the branch is **never merged** and is deleted |
 
@@ -88,7 +89,15 @@ scripts/verify-package <ecosystem> <name> [version]   # does the package exist, 
 scripts/next-version          # next release version from the commits (--notes: changelog section)
 scripts/repo-settings verify  # branch rules still in place (owner: apply)
 scripts/sync-constitution     # after CONSTITUTION.md changed
+scripts/update-standard <{{ issue_key }}-n> [--to vX.Y.Z]   # new version of the standard on a branch (docs/process/updating.md)
+scripts/check standard-version   # is a newer version of the standard out? prints its upgrade notes (never blocks)
 ```
+
+Files are of three kinds ([`docs/process/updating.md`](docs/process/updating.md)): **standard files** (scripts,
+hooks, workflows, `check.config`) are replaced by every update and never edited here; **project
+files** (`README.md`, `project.config`, `TODO.md`, `docs/product/`, ...) are never touched by an
+update; **shared files** (this file, `CLAUDE.md`, `CONSTITUTION.md`, `.guardrails`, `lefthook.yml`,
+`.gitignore`, `CODEOWNERS`) end with a marked project section, and only that section is edited here.
 {%- if use_speckit %}
 
 ### Spec Kit skills (`.claude/skills/speckit-*`)
@@ -129,6 +138,8 @@ feat({{ issue_key }}-40)!: new show file format        # ! = breaking change
 
 Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
 `feat` and `fix` need the issue key. Versions follow from these types (`scripts/next-version`).
+
+<!-- project rules: below this line. The standard never edits what follows; sections 7 and 8 are the project's. -->
 
 ## 7. Project-specific rules
 

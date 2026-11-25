@@ -12,7 +12,7 @@ How work flows from idea to release. Rules: `CONSTITUTION.md` (why) and `AGENTS.
 | 4. Quality attributes and concerns | `docs/product/quality-attributes.md` | `/stack-concerns` |
 | 5. Research per concern; spikes where only code can answer | `docs/research/stack-*.md`, `spike/*` branches | `/stack-research` |
 | 6. Stack decision (owner accepts) | `docs/decisions/0002-choose-the-stack.md` → accepted | `/stack-decide` |
-| 7. Stack layer | the checklist [`stack-layer.md`](stack-layer.md): profile, boundaries, complexity, performance, UI, contracts, security tools, SAST rules, fuzzing, DAST, Docker, coverage; every variable in `check.config` decided | `copier update --trust --data stack=<name>`, then `/stack-layer` |
+| 7. Stack layer | the checklist [`stack-layer.md`](stack-layer.md): profile, boundaries, complexity, performance, UI, contracts, security tools, SAST rules, fuzzing, DAST, Docker, coverage; every variable in `project.config` decided | `copier update --trust --data stack=<name>`, then `/stack-layer` |
 | 8. First working build | review the research: ASRs, retrospective (remake), added concerns, stale notes | step 14 of the playbook |
 
 Research notes are dated, verified against the registries and re-checked

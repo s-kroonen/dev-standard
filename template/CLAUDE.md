@@ -14,7 +14,7 @@
   `~/.claude`, no reads of `.env` or credentials. A sandbox refusal is the rule working.
 - Never weaken a test to get green. If a test must change, say so in the handover; a person adds
   the PR label `test-change` (CI `test-integrity`).
-- A `PostToolUse` hook formats each edited file (`FORMAT_FILE_CMD` in `check.config`) and reports
+- A `PostToolUse` hook formats each edited file (`FORMAT_FILE_CMD` in `check.config` or `project.config`) and reports
   problems in edited Markdown and source comments (`.claude/hooks/lint-file.sh`); the `Stop`
   hook runs the stages of `STOP_STAGES` (default `fast test build`).
 - Writing rule: `docs/process/writing.md` (no first or second person, present tense, no filler, no
@@ -23,3 +23,8 @@
   person adds MCP servers; `WebFetch` and `curl` ask first.
 - Skills: Spec Kit's `/speckit-*` (if set up), plus `/release`, `/handover`, `/stack-layer`,
   `/quality-review` (read-only `quality-reviewer` subagent).
+- `/update-standard`: new version of the standard through `scripts/update-standard`; conflicts are
+  resolved only inside project sections (the part of a shared file below its marker); standard
+  files are never edited.
+
+<!-- project rules: below this line. The standard never edits what follows. -->

@@ -179,6 +179,14 @@ deps-report:
   script: [scripts/check deps-report]
   allow_failure: true
 
+standard-version:
+  stage: report
+  extends: .tools
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  script: [scripts/check standard-version]
+  allow_failure: true
+
 # A person pushes the tag v<x.y.z> on main (after merging release/v<x.y.z>): checks, SBOM, release
 # with the CHANGELOG section, and a merge request main -> dev (scripts/next-version needs it).
 # Needs a CI/CD variable RELEASE_BOT_TOKEN (project access token, scope api, role Developer or

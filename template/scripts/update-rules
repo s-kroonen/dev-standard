@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Vendors the opengrep rule sets listed in OPENGREP_OPEN_RULESETS (check.config) from
+# Vendors the opengrep rule sets listed in OPENGREP_OPEN_RULESETS (check.config, project.config) from
 # opengrep-rules at the pinned commit into .opengrep/rules/open/. Only rule files are kept; the
 # test fixtures next to them are dropped, or the normal scan would report them.
 #
@@ -10,6 +10,8 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 source ./check.config
+# shellcheck source=/dev/null
+[[ -f project.config ]] && source ./project.config
 : "${OPENGREP_RULES_COMMIT:?set OPENGREP_RULES_COMMIT in check.config}"
 
 src="$(mktemp -d)"

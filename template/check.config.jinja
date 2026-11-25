@@ -1,10 +1,13 @@
-# check.config — project settings for scripts/check, scripts/setup and CI ({{ project_name }}). Sourced by bash.
+# check.config — the standard's settings for scripts/check, scripts/setup and CI ({{ project_name }}). Sourced by bash.
+# A STANDARD FILE: every `copier update` (scripts/update-standard) replaces it. Never edit it; the
+# project's own values go into project.config, which is sourced after this file and wins.
 # A guardrail file (.guardrails): agents don't change it; humans change it through a reviewed PR.
 
-# >>> project (stack layer: copier question "stack"; change with `copier update --data stack=<name>`)
+# --- Stack profile (copier question "stack"; change with `copier update --data stack=<name>`) -------
 # Empty = not configured (skip locally, FAIL in CI). "none" = not applicable.
 # Every stack must define TEST_LIST_CMD (zero tests = failure), SKIP_MARKERS and ASSERT_PATTERN
 # (test integrity) and COVERAGE_CMD; tests/quality-canary/ proves the gates fail on planted cases.
+# A project overrides a command in project.config.
 {%- if stack == 'none' %}
 # Day 0: no stack decided (docs/decisions/0002-choose-the-stack.md). Source files fail
 # `check fast` (code-needs-gates) until a stack is set; experiments go to spikes/ on a spike/* branch.
@@ -119,37 +122,12 @@ SAFETY_TEST_CMD="flutter test --tags safety"
 SAFETY_TEST_LIST_CMD="flutter test --tags safety --reporter json 2>/dev/null | grep '\"type\":\"testStart\"' | grep -v 'loading '"
 OPENGREP_OPEN_RULESETS="dockerfile generic/secrets yaml/github-actions"
 {%- endif %}
-OPENGREP_RULES=".opengrep/rules/custom .opengrep/rules/open"
+OPENGREP_RULES=".opengrep/rules/custom .opengrep/rules/project .opengrep/rules/open"   # project/ is the project's own rules
 {%- if stack != 'node' %}
 OPENGREP_EXCLUDE_RULES=""
 {%- endif %}
-COVERAGE_CHANGED_MIN=80   # % of changed lines covered by tests
-COVERAGE_TOTAL_MIN=0      # raise it to the current total once code exists (playbook step 12); never lower it
 SAFETY_REQUIRED={{ 'true' if safety_critical else 'false' }}   # constitution VII: safety-tagged tests must exist and pass
 QUALITY_CANARY_DIR="tests/quality-canary/{{ stack }}"
-# <<< project
-
-# >>> stack layer playbook (docs/process/stack-layer.md; skill /stack-layer)
-# After the stack decision and again as the code grows, each variable is decided: a command, or
-# "none" with a reason comment on the same line, e.g.  E2E_CMD="none"   # no UI.
-# Empty = undecided: `scripts/check stack-layer` warns locally and FAILS in CI once code exists.
-# architecture boundaries (import-linter, dependency-cruiser, cargo-modules, NetArchTest, ...)
-ARCH_CMD=""
-# complexity and duplication (ruff C90, eslint complexity + jscpd, clippy, CA1502, ...)
-COMPLEXITY_CMD=""
-# performance budgets from the quality attributes (pytest-benchmark, vitest bench, criterion, ...)
-PERF_CMD=""
-# UI: Playwright incl. accessibility (axe) and a bundle-size budget
-E2E_CMD=""
-# contracts between parts: OpenAPI / AsyncAPI diff + schema-based tests
-CONTRACT_CMD=""
-# the language's own security tools (pip-audit, npm audit signatures, cargo-deny, ...)
-SECURITY_NATIVE_CMD=""
-# fuzz parsers of untrusted input; use ${FUZZ_SECONDS:-30} (CI sets 600 in the weekly run)
-FUZZ_CMD=""
-# scan of the running app (ZAP baseline), when it serves HTTP
-DAST_CMD=""
-# <<< stack layer playbook
 
 # --- Rules -----------------------------------------------------------------------------------------
 ISSUE_KEY="{{ issue_key }}"
@@ -157,7 +135,7 @@ ISSUE_KEY="{{ issue_key }}"
 {%- if feature_level == 'agentic' %}{% set _ = agentic.append('feat') %}{% endif %}
 {%- if bug_level == 'agentic' %}{% set _ = agentic.append('fix') %}{% endif %}
 {%- if release_level == 'agentic' %}{% set _ = agentic.append('release') %}{% endif %}
-AGENT_BRANCH_RE='^({{ (agentic + ['claude']) | join('|') }})/|^ccr-'   # agent branches (same as .claude/hooks/git-policy.sh)
+AGENT_BRANCH_RE='^({{ (agentic + ['claude']) | join('|') }})/|^ccr-{% if update_level == 'agentic' %}|^chore/[A-Za-z0-9]+-[0-9]+-update-dev-standard${% endif %}'   # agent branches (same as .claude/hooks/git-policy.sh)
 COMMIT_TYPES="feat|fix|docs|refactor|perf|test|build|ci|chore|revert"
 COMMIT_KEY_REQUIRED="feat|fix"                # these types must carry the issue key as scope
 PR_MAX_LINES=800                              # agentic PRs (bugs, releases) are checked against this
@@ -168,9 +146,6 @@ LICENSE_SEVERITY="HIGH,CRITICAL"              # trivy licence classes that block
 RESEARCH_MAX_AGE_DAYS=90                      # research findings are re-checked within this time (docs/research/README.md)
 RESEARCH_EXEMPT_ADRS="0001"                   # decision numbers that need no research evidence
 STOP_STAGES="fast test build"                 # what the agent's Stop hook runs (.claude/hooks/run-checks.sh)
-# Vale (writing rule, docs/process/writing.md): a path regex for content in another language or vendored
-# text that the prose rules skip. Markdown and source comments are linted otherwise; see .vale.ini.
-VALE_EXCLUDE=""
 # AI watermarks (ERE, case-insensitive) that fail commit messages, PR titles and PR bodies.
 WATERMARK_PATTERN='^[[:space:]]*Co-Authored-By:.*(Claude|Anthropic|Copilot|ChatGPT|OpenAI|Gemini|Codex|Cursor|Aider|Devin)|^[[:space:]]*Claude-Session:|Generated (with|by) \[?(Claude|Copilot|ChatGPT|Codex|Cursor|Gemini)|🤖|claude\.ai/(code|chat)/[^[:space:]]*session'
 SECURITY_SEVERITY="HIGH,CRITICAL"             # what blocks: deps gate, config, image
@@ -180,6 +155,7 @@ DEP_DOCS="specs/*/plan.md docs/decisions/*.md"   # a new dependency must be name
 SKIP_DIRS="node_modules,.dart_tool,build,dist,.venv,.tools,target,bin,obj"
 
 # --- Pinned tools (bump by hand; checksums from the official release files) ----------------------
+COPIER_VERSION="9.7.1"                                                                 # runs scripts/update-standard (uvx --from copier==...)
 MARKDOWNLINT_VERSION="0.24.0"                                                          # markdownlint-cli2 on npm, released 2026-10-21
 VALE_VERSION="3.26.0"                                                                  # released 2026-10-31
 VALE_SHA256="22aa69a556558e4a9dfc63c17030777383d8d3c48dcdfad655fa98e839d666ed"        # vale_3.26.0_Linux_64-bit.tar.gz (vale_3.26.0_checksums.txt)

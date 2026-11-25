@@ -1,11 +1,22 @@
 # dev-standard: Copier template for a new project, day 0 (no code, no stack yet).
 #
-#   uvx --from copier copier copy --trust /path/or/url/to/dev-standard ./my-project
-#   uvx --from copier copier update --trust            # later: pull in a new version of the standard
+#   uvx --from copier==9.7.1 copier copy --trust gh:<owner>/dev-standard ./my-project
+#   scripts/update-standard <KEY-n>        # later: pull in a new version of the standard (wraps copier update)
 #
-# --trust is needed because the template runs tasks (Spec Kit init, chmod, constitution sync).
+# --trust is needed because the template runs tasks (Spec Kit init, chmod) and migrations.
+#
+# File ownership in a generated project (template/docs/process/updating.md):
+#   standard files  replaced by every update (scripts/, hooks, workflows, check.config, ...)
+#   project files   written once, listed in _skip_if_exists below, never touched by an update
+#   shared files    merged by Copier; each ends with a marked project section the standard never edits
+# Verified with Copier 9.7.1: _skip_if_exists also applies on update (an existing file is kept, a
+# missing one is created); on update _tasks run twice, in the project directory after the new
+# standard files are rendered and BEFORE the merge restores the project's edits, and in a temporary
+# copy without git (--skip-tasks skips both); _migrations run in the project directory, `before`
+# ahead of the update and `after` behind the merge, also with --skip-tasks; one without `version`
+# runs on every update (after).
 
-_min_copier_version: "9.4"
+_min_copier_version: "9.7"
 _subdirectory: template
 _answers_file: .copier-answers.yml
 _templates_suffix: .jinja
@@ -57,6 +68,12 @@ release_level:
   choices: [ai-assist, agentic]
   default: agentic
 
+update_level:
+  type: str
+  help: AI level for standard updates (scripts/update-standard; the update is mechanical, the PR review is the gate)
+  choices: [ai-assist, agentic]
+  default: agentic
+
 platform:
   type: str
   help: CI platform (none = decide later)
@@ -101,10 +118,37 @@ owner:
   help: Maintainer name or handle (CODEOWNERS, decision records)
   default: maintainer
 
+# Project files: written once at generation, never touched by an update (also not when the standard
+# changes them). Everything else is a standard file or a shared file.
+# Verified with Copier 9.7.1: patterns are gitignore-style, but a leading "/" or "./" does NOT anchor
+# them at the project root, so `README.md` also matches `docs/research/README.md`; a later
+# `!pattern` takes such a path out again. A path in a standard folder that is not a project file
+# needs its `!` line here.
+_skip_if_exists:
+  - README.md
+  - "!docs/research/README.md"
+  - "!tests/**/README.md"
+  - CHANGELOG.md
+  - TODO.md
+  - project.config
+  - docs/product/**
+  - docs/decisions/0002-*
+  - docs/security-exceptions.md
+  - .trivyignore.yaml
+  - osv-scanner.toml
+  - .prettierignore
+  - .opengrep/rules/project/**
+  - .vale/styles/Project/**
+  - .vale/styles/config/vocabularies/Project/**
+  - tests/hooks/project-cases.tsv
+
+# Tasks run on copy and on update, but on update before the merge of local edits (and once more in a
+# temporary copy that is not a git repository): nothing that reads shared files belongs here.
+# Post-update steps are migrations (below).
 _tasks:
   - command: "[ -d .git ] || git init -q -b dev"
     when: "{{ _copier_operation == 'copy' }}"
-  - command: chmod +x scripts/check scripts/setup scripts/install-tools scripts/update-rules scripts/sync-constitution scripts/next-version scripts/verify-package scripts/repo-settings .claude/hooks/protect-paths.sh .claude/hooks/git-policy.sh .claude/hooks/run-checks.sh .claude/hooks/format-file.sh
+  - command: chmod +x scripts/check scripts/setup scripts/install-tools scripts/update-rules scripts/sync-constitution scripts/next-version scripts/verify-package scripts/repo-settings scripts/update-standard scripts/post-update .claude/hooks/protect-paths.sh .claude/hooks/git-policy.sh .claude/hooks/run-checks.sh .claude/hooks/format-file.sh
   - command: grep -rl __TODAY__ . --exclude-dir=.git | xargs -r sed -i "s/__TODAY__/$(date +%F)/g"
     when: "{{ _copier_operation == 'copy' }}"
   - command: >-
@@ -114,5 +158,17 @@ _tasks:
   - command: uvx --from specify-cli=={{ speckit_version }} specify preset add --dev "{{ _copier_conf.src_path }}/speckit-preset"
     when: "{{ use_speckit and _copier_operation == 'copy' }}"
   - command: scripts/sync-constitution
-    when: "{{ use_speckit }}"
+    when: "{{ use_speckit and _copier_operation == 'copy' }}"
   - command: scripts/update-rules
+    when: "{{ _copier_operation == 'copy' }}"
+
+# Migrations run in the project directory with the new template's checkout as {{ _copier_conf.src_path }}.
+# Scripts live in migrations/ of this repository (not rendered into projects).
+_migrations:
+  # v0.3.0: check.config became a standard file; the project's values move into project.config.
+  - version: v0.3.0
+    command: bash "{{ _copier_conf.src_path }}/migrations/v0.3.0-project-config.sh" "{{ _copier_conf.src_path }}"
+    when: "{{ _stage == 'after' }}"
+  # Every update, after the merge: constitution copy, executable bits, vendored rule sets.
+  - command: chmod +x scripts/* .claude/hooks/*.sh 2>/dev/null; [ -f scripts/post-update ] && bash scripts/post-update
+    when: "{{ _stage == 'after' }}"

@@ -38,9 +38,11 @@
 #                                    with a base branch Vale reads only the changed files
 #   scripts/check docs-file <path>   the writing rule (Vale) for one file; used by the PostToolUse hook
 #   scripts/check pr-text            the PR or MR body (env PR_BODY): writing rule (Vale) and no AI watermark
+#   scripts/check standard-version   is a newer dev-standard out? prints its upgrade notes; never fails (weekly CI job, needs network)
 #   scripts/check all                everything above that needs no base branch
 #
-# Project commands and pinned tools live in check.config. Security tools run from the local binary
+# The standard's settings and pinned tools live in check.config (replaced by every update); the
+# project's own values live in project.config (sourced after it, never touched by an update). Security tools run from the local binary
 # when present (scripts/install-tools, GitLab job images) or else from their pinned container image.
 # Exit code: 0 when every requested check passed, 1 otherwise.
 
@@ -52,7 +54,7 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT" || exit 1
 export PATH="$ROOT/.tools/bin:$PATH"
 
-# Defaults; check.config overrides them.
+# Defaults; check.config and then project.config override them.
 FORMAT_CMD="" LINT_CMD="" TYPECHECK_CMD="" TEST_CMD="" BUILD_CMD=""
 TEST_LIST_CMD=""            # prints one line per test; zero lines = no tests = failure
 SKIP_MARKERS=""             # ERE matching a skipped/focused test in this stack
@@ -103,6 +105,7 @@ OPENGREP_IMAGE=""
 OPENGREP_RULES=".opengrep/rules/custom"
 OPENGREP_EXCLUDE_RULES=""
 [[ -f check.config ]] && source ./check.config
+[[ -f project.config ]] && source ./project.config   # the project's values win over the standard's
 
 failed=()
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -118,9 +121,9 @@ count_lines() { grep -cve '^[[:space:]]*$' || true; }
 # A project command. Empty = not configured (skip locally, FAIL in CI); "none" = not applicable.
 step() {
     local name="$1" cmd="$2"
-    if [[ "$cmd" == "none" ]]; then skip "$name (not applicable, check.config)"; return; fi
+    if [[ "$cmd" == "none" ]]; then skip "$name (not applicable, check.config or project.config)"; return; fi
     if [[ -z "$cmd" ]]; then
-        if in_ci; then fail "$name" "(no command in check.config)"; else skip "$name (no command in check.config)"; fi
+        if in_ci; then fail "$name" "(no command in check.config or project.config)"; else skip "$name (no command in check.config or project.config)"; fi
         return
     fi
     bold "── $name: $cmd"
@@ -344,7 +347,7 @@ playbook_step() {
 }
 
 # Once code exists, every playbook variable is a command or "none" with a reason comment in
-# check.config. Empty = undecided: WARN locally, FAIL in CI.
+# project.config. Empty = undecided: WARN locally, FAIL in CI.
 stack_layer() {
     local n; n="$(count_lines <<<"$(source_files)")"
     if [[ "$n" -eq 0 ]]; then skip "stack-layer (no code yet)"; return; fi
@@ -353,14 +356,14 @@ stack_layer() {
     for v in $PLAYBOOK_VARS; do
         val="${!v}"
         if [[ -z "$val" ]]; then open+=("$v is empty")
-        elif [[ "$val" == none ]] && ! grep -qE "^${v}=[\"']none[\"'][[:space:]]*#[[:space:]]*[^[:space:]]" check.config 2>/dev/null; then
+        elif [[ "$val" == none ]] && ! grep -qE "^${v}=[\"']none[\"'][[:space:]]*#[[:space:]]*[^[:space:]]" project.config check.config 2>/dev/null; then
             open+=("$v is \"none\" without a reason: write  $v=\"none\"   # why it does not apply")
         fi
     done
     if [[ "$COVERAGE_TOTAL_MIN" == 0 ]]; then warn "COVERAGE_TOTAL_MIN is 0: raise it to the current total (step 12 of the playbook)"; fi
     if [[ ${#open[@]} -eq 0 ]]; then pass "stack-layer"; return; fi
     printf '  %s\n' "${open[@]}"
-    echo "  Work through docs/process/stack-layer.md (skill /stack-layer): set a command or \"none\" + reason in check.config."
+    echo "  Work through docs/process/stack-layer.md (skill /stack-layer): set a command or \"none\" + reason in project.config."
     if in_ci; then fail "stack-layer"; else warn "stack-layer: ${#open[@]} undecided (fails in CI)"; fi
 }
 
@@ -380,7 +383,7 @@ test_stage() {
 
 coverage() {
     local base="${1:-$(default_base)}"
-    [[ "$COVERAGE_CMD" == "none" ]] && { skip "coverage (not applicable, check.config)"; return; }
+    [[ "$COVERAGE_CMD" == "none" ]] && { skip "coverage (not applicable, check.config or project.config)"; return; }
     if [[ -z "$COVERAGE_CMD" ]]; then
         if [[ -n "$(source_files)" ]] && in_ci; then fail "coverage"; echo "  Code exists but COVERAGE_CMD is not set."; else skip "coverage (no COVERAGE_CMD)"; fi
         return
@@ -430,7 +433,7 @@ test_integrity() {
         < <(git diff --name-only "$base"...HEAD | grep -E "$SNAPSHOT_PATHS" || true)
     if [[ -n "$SKIP_MARKERS" ]]; then
         local added
-        added="$(git diff -U0 "$base"...HEAD -- . ':!scripts' ':!check.config' ':!tests/quality-canary' | grep -E '^\+[^+]' | grep -E -- "$SKIP_MARKERS" || true)"
+        added="$(git diff -U0 "$base"...HEAD -- . ':!scripts' ':!check.config' ':!project.config' ':!tests/quality-canary' | grep -E '^\+[^+]' | grep -E -- "$SKIP_MARKERS" || true)"
         [[ -n "$added" ]] && findings+=("new skip/focus marker: $(head -n1 <<<"$added" | cut -c1-100)")
     fi
     if [[ -n "$ASSERT_PATTERN" ]]; then
@@ -965,7 +968,8 @@ pr_text() {
     run_tool "pr-text (Vale)" vale_stdin
 }
 
-# Runs the Claude Code hooks against tests/hooks/cases.tsv in a throwaway repo:
+# Runs the Claude Code hooks against tests/hooks/cases.tsv (standard) and then
+# tests/hooks/project-cases.tsv (the project's own cases) in a throwaway repo:
 #   <expected exit> TAB <branch> TAB <tool: bash|edit> TAB <command or path>
 json_str() { local v="${1//\\/\\\\}"; v="${v//\"/\\\"}"; printf '%s' "$v"; }
 hooks() {
@@ -998,11 +1002,25 @@ hooks() {
             fi
             n=$((n + 1))
             [[ "$got" == "$want" ]] || bad+=("[$parser][$branch] $arg (exit $got, want $want)")
-        done < "$ROOT/$cases"
+        done < <(cat "$ROOT/$cases" "$ROOT/tests/hooks/project-cases.tsv" 2>/dev/null)
     done
     cd "$ROOT" || return
     rm -rf "$work"
     if [[ ${#bad[@]} -eq 0 ]]; then pass "hooks ($((n / ${#parsers[@]})) cases x ${#parsers[@]} parsers: ${parsers[*]})"; else printf '  %s\n' "${bad[@]}"; fail "hooks"; fi
+}
+
+# A newer version of the standard: informs, never blocks (an update is a PR a person decides on).
+standard_version() {
+    [[ -x scripts/update-standard && -f .copier-answers.yml ]] || { skip "standard-version (no scripts/update-standard or .copier-answers.yml)"; return; }
+    bold "── standard version"
+    local out rc
+    out="$(scripts/update-standard --check 2>&1)"; rc=$?
+    printf '%s\n' "$out"
+    case $rc in
+        0) pass "standard-version" ;;
+        10) warn "standard-version: a newer dev-standard exists (notes above; scripts/update-standard <KEY-n>)" ;;
+        *) skip "standard-version (could not check: see above)" ;;
+    esac
 }
 
 case "${1:-all}" in
@@ -1028,6 +1046,7 @@ case "${1:-all}" in
     new-deps)        new_deps "${2:-}" ;;
     todo-ids)        todo_ids "${2:-}" ;;
     hooks)           hooks ;;
+    standard-version) standard_version ;;
     research)        research ;;
     proof)           proof "${2:-}" ;;
     scope)           scope "${2:-}" ;;

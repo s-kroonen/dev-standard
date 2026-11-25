@@ -3,6 +3,7 @@
 # Claude Code PreToolUse hook: git rules per work type (AGENTS.md, "Work types and AI levels").
 #   The agent may create, commit on and push only these branches:
 #     - agentic work types and spikes: fix/, release/, spike/
+#     - standard updates: chore/<KEY>-<n>-update-dev-standard (scripts/update-standard)
 #     - branches made by Claude Code on the web / the Claude GitHub Action (claude/, ccr-): those
 #       sessions are agentic by nature; CI and branch rules gate what they push.
 #   Everything else: the agent leaves changes uncommitted; a person commits.
@@ -18,7 +19,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/parse-input.sh" || { echo "Blocked: .clau
 cmd="$(hook_command)"
 [[ -z "$cmd" ]] && exit 0
 
-AGENT_BRANCHES='^(fix|release|spike)/|^claude/|^ccr-'
+AGENT_BRANCHES='^(fix|release|spike)/|^claude/|^ccr-|^chore/[A-Za-z0-9]+-[0-9]+-update-dev-standard$'
 root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 branch="$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
 
