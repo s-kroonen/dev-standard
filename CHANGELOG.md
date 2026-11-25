@@ -6,7 +6,7 @@ between its own and the new one; `scripts/update-standard` prints them. Versioni
 required check or a new manual step is a breaking change (minor while the major version is 0), and
 each breaking change ships a Copier migration or an upgrade note.
 
-## v0.3.0 (unreleased)
+## v0.3.0
 
 ### Added
 
