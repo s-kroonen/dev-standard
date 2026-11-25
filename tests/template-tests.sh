@@ -2,14 +2,21 @@
 #
 # Tests of the template itself: generates throwaway projects and checks that the stages of
 # scripts/check pass and fail where they should. Needs uv, git, jq, node/npm (docs lint), network
-# (PyPI, npm, Copier, Spec Kit) and the pinned scanners on PATH (gitleaks, trivy, opengrep).
+# (PyPI, npm, Copier, Spec Kit) and the pinned scanners on PATH (gitleaks, trivy, opengrep, vale); the checks of this
+# repository itself run at the end (shellcheck, zizmor via uvx).
 #
 #   tests/template-tests.sh [workdir]        (default: a new temp dir; kept, its path is printed)
 #
 # osv.dev is not needed: the malicious-package gate is tested with a stub osv-scanner.
 set -uo pipefail
+# The suite is independent of the CI it runs in: scripts/check reads these variables, and the cases
+# that test CI mode set CI=1 themselves.
+unset CI GITHUB_ACTIONS GITHUB_HEAD_REF GITHUB_BASE_REF GITLAB_CI CI_COMMIT_REF_NAME
+for v in $(compgen -v | grep '^CI_MERGE_REQUEST_'); do unset "$v"; done
 here="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$here/.tools/bin:$PATH"   # pinned tools from scripts/setup (same as CI)
 work="${1:-$(mktemp -d)}"; mkdir -p "$work"; cd "$work" || exit 1
+work="$PWD"
 res="$work/results.txt"; : > "$res"
 strip() { sed 's/\x1b\[[0-9;]*m//g'; }
 G() { git -c user.name=t -c user.email=t@t "$@"; }
@@ -37,16 +44,188 @@ commit_all() { (cd "$1" && git add -A && G commit -q --no-verify -m init && git 
 echo "== day 0 (stack none): everything green, also in CI mode"
 gen none none; commit_all none
 (
-cd none
+cd none || exit 1
 expect "none: scripts/check all" 0 scripts/check all
 expect "none: scripts/check all with CI=1" 0 env CI=1 scripts/check all
 expect_out "none: stack-layer skips without code" "SKIP stack-layer" scripts/check stack-layer
 )
 
+echo "== writing rule (Vale), AI attribution, lint-file hook"
+(
+cd none || exit 1
+D() { scripts/check docs-file docs/w.md; }
+doc() { printf '# Title\n\n%s\n' "$1" > docs/w.md; }
+rule() { # <rule> <bad text> <good text>
+    doc "$2"; expect "writing: $1 fails (docs-file)" 1 D
+    expect_out "writing: $1 is named in the output" "DevStandard\.$1" D
+    doc "$3"; expect "writing: $1 fixed passes" 0 D
+}
+rule Pronouns "You run the check." "The check runs."
+rule History "The check is now stricter." "The check is strict."
+rule Filler "This is simply a check." "This is a check."
+rule Hedging "The hook should work." "The hook blocks force pushes."
+rule Exclamation "The check passes!" "The check passes."
+rule Emoji "Ready ✅." "Ready."
+rule Watermarks "Co-Authored-By: Claude <noreply@anthropic.com>" "The commit has no trailer."
+doc "The hook blocks pushes. We say so. <!-- vale off -->We say so here.<!-- vale on -->"
+expect "writing: text outside vale off still fails" 1 D
+doc "<!-- vale off -->
+We say so.
+
+<!-- vale on -->
+
+The check passes."
+expect "writing: <!-- vale off --> works" 0 D
+doc "$(printf 'The check reads the file and %.0s' {1..8}) then it prints a long sentence that has more than thirty words in it."
+expect "writing: a warning-only doc passes" 0 D
+expect_out "writing: ... and the warning is printed" "more than 30 words" D
+rm docs/w.md
+echo "-- full docs stage"
+printf '# Title\n\nYou run it.\n' > docs/w.md; G add -A; expect "docs: a doc with an error rule fails the stage" 1 scripts/check docs
+printf '# Title\n\nThe check runs.\n' > docs/w.md; expect "docs: the fixed doc passes the stage" 0 scripts/check docs
+echo "-- source comments (Vale reads Python, TypeScript, Rust, Go, C#; not shell or Dart)"
+for ext in py ts rs go cs; do
+    case $ext in py) c='# we do this';; *) c='// we do this';; esac
+    printf '%s\nx = 1\n' "$c" > "w.$ext"; expect "writing: a first-person $ext comment fails" 1 scripts/check docs-file "w.$ext"
+    printf '%s\n' "${c/we do this/the check does this}" > "w.$ext"; expect "writing: the fixed $ext comment passes" 0 scripts/check docs-file "w.$ext"
+done
+printf 'x = "we do this"\n' > w.py; expect "writing: a string literal is not read" 0 scripts/check docs-file w.py
+printf '# TODO: fix this\n' > w.py; expect "writing: TODO without a key fails" 1 scripts/check docs-file w.py
+printf '# TODO(TST-12): fix this\n' > w.py; expect "writing: TODO(KEY-n) passes" 0 scripts/check docs-file w.py
+printf '# we do this\n' > w.sh; expect "writing: shell comments are not read (documented)" 0 scripts/check docs-file w.sh
+rm -f w.* docs/w.md
+echo "-- pr-text"
+expect "pr-text: a body with 'you' fails" 1 env PR_BODY="Please check that you agree." scripts/check pr-text
+expect "pr-text: a watermark fails" 1 env PR_BODY=$'Fixes the bug.\n\nCo-Authored-By: Claude <noreply@anthropic.com>' scripts/check pr-text
+expect "pr-text: a session link fails" 1 env PR_BODY="See https://claude.ai/code/session_01AbCdEf for the run." scripts/check pr-text
+expect "pr-text: a clean body passes" 0 env PR_BODY=$'## What and why\n\nThe check reads the body and fails on a watermark.' scripts/check pr-text
+expect "pr-text: an empty body is skipped" 0 env PR_BODY="" scripts/check pr-text
+echo "-- commit-msg and pr-title"
+m() { printf '%s\n' "$1" > "$work/msg"; scripts/check commit-msg "$work/msg"; }
+expect "commit-msg: a Co-Authored-By Claude trailer is rejected" 1 m $'feat(TST-1): add a thing\n\nCo-Authored-By: Claude <noreply@anthropic.com>'
+expect "commit-msg: a Claude-Session line is rejected" 1 m $'fix(TST-2): stop a crash\n\nClaude-Session: https://claude.ai/code/session_01AbCdEf'
+expect "commit-msg: a Generated with line is rejected" 1 m $'docs: explain it\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)'
+expect "commit-msg: a human Co-Authored-By trailer is accepted" 0 m $'feat(TST-3): add a thing\n\nCo-Authored-By: Pat Doe <pat@example.org>'
+expect "commit-msg: a plain message is accepted" 0 m "feat(TST-4): add a thing"
+expect "pr-title: a watermark fails" 1 scripts/check pr-title "feat(TST-5): add a thing 🤖"
+echo "-- settings and hooks"
+expect "settings.json has the empty attribution" 0 jq -e '.attribution == {"commit": "", "pr": "", "sessionUrl": false}' .claude/settings.json
+expect "settings.json denies writes to .vale.ini and .vale" 0 jq -e '.sandbox.filesystem.denyWrite | (index("./.vale.ini") and index("./.vale"))' .claude/settings.json
+expect ".guardrails lists the Vale files" 0 grep -q '^\^\\.vale/' .guardrails
+printf '# Title\n\nYou run it.\n' > docs/w.md
+hook() { echo "{\"tool_input\":{\"file_path\":\"$PWD/$1\"}}" | CLAUDE_PROJECT_DIR=$PWD bash .claude/hooks/format-file.sh; }
+expect "lint-file hook: a Markdown error exits 2" 2 hook docs/w.md
+expect_out "lint-file hook: ... and reports the rule on stderr" "DevStandard.Pronouns" hook docs/w.md
+printf '# Title\n\nThe check runs.\n' > docs/w.md
+out="$(hook docs/w.md 2>&1)"; rc=$?
+if [[ $rc -eq 0 && -z "$out" ]]; then echo "ok   lint-file hook: a clean file is silent (exit 0)" | tee -a "$res"; else echo "FAIL lint-file hook: a clean file is silent (exit $rc: $out)" | tee -a "$res"; fi
+expect "lint-file hook: a file outside the project is ignored" 0 bash -c 'echo "{\"tool_input\":{\"file_path\":\"/etc/hostname\"}}" | CLAUDE_PROJECT_DIR=$PWD bash .claude/hooks/format-file.sh'
+rm -f docs/w.md; G reset -q; G checkout -q -- . 2>/dev/null; true
+echo "-- installer: one tool"
+expect_out "install-tools vale installs the pinned version" "vale +vale version 3\.26\.0" scripts/install-tools vale
+)
+
+echo "== agent workflow and CI files of generated projects"
+gen agent none --data github_agent=true --data network_api=true --data safety_critical=true --data update_level=agentic
+gen gl none --data platform=gitlab
+(
+cd agent || exit 1
+expect "agent: workflows have no zizmor findings" 0 uvx zizmor@1.33.1 --offline --min-severity medium .github/workflows/
+expect "agent: claude-agent.yml labels the PR" 0 grep -q 'gh pr edit "\$pr" --add-label agent' .github/workflows/claude-agent.yml
+expect "agent: claude-agent.yml allows gh pr create and the label edit" 0 grep -q 'Bash(gh pr create:\*),Bash(gh pr edit --add-label agent:\*)' .github/workflows/claude-agent.yml
+expect "agent: checks.yml runs pr-text on the PR body through env" 0 grep -q 'PR_BODY: \${{ github.event.pull_request.body }}' .github/workflows/checks.yml
+expect "agent: no AI-use checkbox in the PR template" 1 grep -q 'AI use' .github/pull_request_template.md
+expect "agent: the PR template has the agent checklist" 0 grep -q 'PRs labelled `agent`' .github/pull_request_template.md
+)
+(
+cd gl || exit 1
+expect "gitlab: the CI file parses" 0 uvx --from pyyaml==6.0.4 python -I -c 'import yaml; d = yaml.safe_load(open(".gitlab-ci.yml")); assert "PR_BODY" in d["mr-rules"]["variables"] and "docs" in d'
+expect "gitlab: no AI-use checkbox in the MR template" 1 grep -q 'AI use' .gitlab/merge_request_templates/Default.md
+)
+
+echo "== scripts/lint: actionlint runs shellcheck on the run blocks of workflows"
+lw="$work/lint-wf"; rm -rf "$lw"; mkdir -p "$lw/scripts" "$lw/.github/workflows" "$lw/template"
+cp "$here/scripts/lint" "$lw/scripts/lint"; : > "$lw/template/{% if platform == 'gitlab' %}.gitlab-ci.yml{% endif %}.jinja"
+printf 'name: t\non: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo "ok"\n' > "$lw/.github/workflows/t.yml"
+(cd "$lw" && git init -q -b main && git add -A)
+expect "lint: a clean workflow passes" 0 bash -c "cd '$lw' && CI=1 scripts/lint"
+printf '          if grep -q x file; then echo '"'"'unterminated\n          fi\n' >> "$lw/.github/workflows/t.yml"
+(cd "$lw" && git add -A)
+expect "lint: a workflow with a broken run block (open quote) fails" 1 bash -c "cd '$lw' && CI=1 scripts/lint"
+printf 'name: t\non: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          for f in $(ls); do echo $f; done\n          [ -n "$X" ] && echo $Y\n' > "$lw/.github/workflows/t.yml"
+(cd "$lw" && git add -A)
+expect "lint: an unquoted expansion in a run block fails" 1 bash -c "cd '$lw' && CI=1 scripts/lint"
+
+echo "== guardrails job: a base branch without .guardrails passes with a notice, one with a list stays strict"
+# The job's script is extracted from the workflow file and run against a throwaway repository, so the
+# test runs the code that CI runs. jobscript <file> <github|gitlab> prints it.
+jobscript() {
+    uvx --from pyyaml==6.0.4 python -I -c 'import sys, yaml
+d = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+if sys.argv[2] == "gitlab":
+    print("\n".join(d["guardrails"]["script"]))
+else:
+    steps = d["jobs"]["guardrails"]["steps"]
+    print([s["run"] for s in steps if "run" in s][0])' "$1" "$2"
+}
+# gj_repo <dir> <base has .guardrails: yes|no>: main has README.md (and .guardrails); the PR changes secret.txt
+gj_repo() {
+    rm -rf "$1"; mkdir -p "$1"
+    (
+    cd "$1" || exit 1
+    git init -q -b main
+    printf 'x\n' > README.md; printf 'old\n' > secret.txt
+    [[ "$2" == yes ]] && printf '# guarded\n^secret\\.txt$\n' > .guardrails
+    git add -A; G commit -q -m base
+    git switch -q -c pr
+    printf 'new\n' > secret.txt
+    [[ "$2" == no ]] && printf '# guarded\n^secret\\.txt$\n' > .guardrails
+    git add -A; G commit -q -m change
+    )
+}
+gj_run() { # <dir> <script file> <approved> <mode: github|gitlab>
+    (
+    cd "$1" || exit 1
+    if [[ "$4" == gitlab ]]; then
+        git remote add origin "$1" 2>/dev/null   # the job runs `git fetch origin <target>`: the repository is its own origin
+        CI_MERGE_REQUEST_TARGET_BRANCH_NAME=main CI_MERGE_REQUEST_LABELS="$3" bash -e "$2"
+    else
+        RUNNER_TEMP="$1/tmp" BASE="$(git rev-parse main)" HEAD="$(git rev-parse pr)" APPROVED="$3" bash -e "$2"
+    fi
+    )
+}
+for kind in "github:$here/.github/workflows/ci.yml" "github:none/.github/workflows/guardrails.yml" "gitlab:gl/.gitlab-ci.yml"; do
+    mode="${kind%%:*}"; file="${kind#*:}"; label="${file##*/}"; [[ "$label" == ci.yml ]] && label="ci.yml of this repository"
+    jobscript "$file" "$mode" > "$work/guard.sh"
+    approved_no=false; approved_yes=true
+    if [[ "$mode" == gitlab ]]; then approved_no=""; approved_yes="guardrail-change"; fi
+    gj_repo "$work/gj-no" no; mkdir -p "$work/gj-no/tmp"
+    expect "guardrails ($label): no .guardrails on the base passes" 0 gj_run "$work/gj-no" "$work/guard.sh" "$approved_no" "$mode"
+    expect_out "guardrails ($label): the output names the file that becomes a guardrail" "secret\.txt" gj_run "$work/gj-no" "$work/guard.sh" "$approved_no" "$mode"
+    expect_out "guardrails ($label): the output says there are no guardrail files yet" "no guardrail files yet" gj_run "$work/gj-no" "$work/guard.sh" "$approved_no" "$mode"
+    gj_repo "$work/gj-yes" yes; mkdir -p "$work/gj-yes/tmp"
+    expect "guardrails ($label): a guardrail file changed on a base with a list fails" 1 gj_run "$work/gj-yes" "$work/guard.sh" "$approved_no" "$mode"
+    expect "guardrails ($label): the label allows it" 0 gj_run "$work/gj-yes" "$work/guard.sh" "$approved_yes" "$mode"
+done
+
+echo "== this repository: its own checks, hooks and files"
+expect "repo: scripts/lint passes" 0 bash -c "cd '$here' && scripts/lint"
+expect "repo: scripts/check docs passes (writing rule on README, TODO, PLAN, preset, stacks, template docs)" 0 bash -c "cd '$here' && scripts/check docs"
+expect_out "repo: scripts/check hooks passes" "PASS hooks" bash -c "cd '$here' && scripts/check hooks"
+expect "repo: workflows have no zizmor findings" 0 uvx zizmor@1.33.1 --offline --min-severity medium "$here/.github/workflows/"
+expect "repo: commit-msg uses the key STD" 1 bash -c "cd '$here' && printf 'feat(APP-1): x\n' > '$work/m' && scripts/check commit-msg '$work/m'"
+expect "repo: commit-msg accepts STD" 0 bash -c "cd '$here' && printf 'feat(STD-81): x\n' > '$work/m' && scripts/check commit-msg '$work/m'"
+for f in format-file lint-file parse-input protect-paths run-checks git-policy; do
+    expect "repo: .claude/hooks/$f.sh equals the rendered template hook" 0 cmp "$here/.claude/hooks/$f.sh" "none/.claude/hooks/$f.sh"
+done
+expect "repo: .claude/settings.json equals the template's except denyWrite" 0 bash -c "diff <(jq -S 'del(.sandbox.filesystem.denyWrite)' '$here/.claude/settings.json') <(jq -S 'del(.sandbox.filesystem.denyWrite)' none/.claude/settings.json)"
+expect "repo: .vale.ini sections equal the template's" 0 bash -c "diff <(sed -n '/^\[\*\.md\]/,\$p' '$here/.vale.ini') <(sed -n '/^\[\*\.md\]/,\$p' '$here/template/.vale.ini')"
+expect "repo: the Vale pins of check.config come from the template" 0 bash -c "cd '$here' && source ./check.config && [[ -n \$VALE_VERSION && \$VALE_SHA256 == \$(grep -oP '^VALE_SHA256=\"\K[0-9a-f]+' template/check.config.jinja) ]]"
+
 echo "== python project with code"
 gen py python --data safety_critical=true
 (
-cd py
+cd py || exit 1
 cat > pyproject.toml <<'EOF'
 [project]
 name = "t"
@@ -78,16 +257,16 @@ echo "-- stack-layer"
 expect "stack-layer: empty variables WARN locally (exit 0)" 0 scripts/check stack-layer
 expect_out "stack-layer: ... and say so" "WARN stack-layer: 8 undecided" scripts/check stack-layer
 expect "stack-layer: empty variables FAIL in CI" 1 env CI=1 scripts/check stack-layer
-for v in ARCH COMPLEXITY PERF E2E CONTRACT SECURITY_NATIVE FUZZ DAST; do sed -i "s/^${v}_CMD=\"\"\$/${v}_CMD=\"none\"/" check.config; done
+for v in ARCH COMPLEXITY PERF E2E CONTRACT SECURITY_NATIVE FUZZ DAST; do sed -i "s/^${v}_CMD=\"\"\$/${v}_CMD=\"none\"/" project.config; done
 expect "stack-layer: none without a reason FAILs in CI" 1 env CI=1 scripts/check stack-layer
-for v in ARCH COMPLEXITY PERF E2E CONTRACT SECURITY_NATIVE FUZZ DAST; do sed -i "s/^${v}_CMD=\"none\"\$/${v}_CMD=\"none\"   # test: not applicable/" check.config; done
+for v in ARCH COMPLEXITY PERF E2E CONTRACT SECURITY_NATIVE FUZZ DAST; do sed -i "s/^${v}_CMD=\"none\"\$/${v}_CMD=\"none\"   # test: not applicable/" project.config; done
 expect "stack-layer: none with a reason PASSes in CI" 0 env CI=1 scripts/check stack-layer
-sed -i 's/^COMPLEXITY_CMD=.*/COMPLEXITY_CMD="uv run ruff check --select C901 --config '"'"'lint.mccabe.max-complexity=10'"'"' src"/' check.config
+sed -i 's/^COMPLEXITY_CMD=.*/COMPLEXITY_CMD="uv run ruff check --select C901 --config '"'"'lint.mccabe.max-complexity=10'"'"' src"/' project.config
 expect "complexity: simple code passes" 0 scripts/check complexity
 python3 -c "print('def f(x: int) -> int:\n' + ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(15)) + '    return 0')" > src/t/complex.py
 expect "complexity: a 16-branch function fails" 1 scripts/check complexity
 rm src/t/complex.py
-git checkout -q check.config
+git checkout -q project.config
 
 echo "-- research"
 mkdir -p docs/research
@@ -193,6 +372,15 @@ sed -i 's|^BUILD_CMD=.*|BUILD_CMD="false"|' check.config
 expect "stop hook: blocks (exit 2) when the build fails" 2 stop
 sed -i 's|^STOP_STAGES=.*|STOP_STAGES="fast test"|' check.config
 expect "stop hook: STOP_STAGES without build ignores the build" 0 stop
+
+echo "-- hook: LINT_FILE_CMD (ruff) reports a problem to the agent"
+printf 'import os\n' > src/t/unused.py
+lintin() { echo "{\"tool_input\":{\"file_path\":\"$PWD/src/t/unused.py\"}}" | CLAUDE_PROJECT_DIR=$PWD bash .claude/hooks/format-file.sh; }
+expect "lint-file hook: an unused import exits 2 (ruff check)" 2 lintin
+expect_out "lint-file hook: ... and names the file" "unused.py" lintin
+printf '"""Unused."""\n' > src/t/unused.py
+expect "lint-file hook: a clean python file exits 0" 0 lintin
+rm -f src/t/unused.py
 git checkout -q check.config src
 )
 
@@ -201,7 +389,7 @@ echo "== node project: licences (needs npm)"
 if command -v npm >/dev/null 2>&1; then
 gen node node
 (
-cd node
+cd node || exit 1
 printf '{"name":"t","version":"0.1.0","private":true,"type":"module","scripts":{"build":"tsc --noEmit"}}\n' > package.json
 mkdir -p src; printf 'export function add(a: number, b: number): number {\n  return a + b;\n}\n' > src/calc.ts
 printf 'import { expect, test } from "vitest";\nimport { add } from "./calc";\n\ntest("add", () => {\n  expect(add(1, 2)).toBe(3);\n});\n' > src/calc.test.ts
@@ -223,6 +411,63 @@ sed -i 's/2099-01-01/2026-01-01/' .trivyignore.yaml
 expect "node: ... fails again when the exception expired" 1 scripts/check licenses
 )
 else echo "skip node tests (no npm)"; fi
+
+echo "== project.config, markers, update-standard preconditions, standard-version"
+(
+cd none || exit 1
+expect "project.config exists and is a guardrail file" 0 bash -c "test -f project.config && grep -qF '^project\\.config\$' .guardrails"
+expect "project.config is in CODEOWNERS and the sandbox denyWrite list" 0 bash -c "grep -q '^/project.config' CODEOWNERS && jq -e '.sandbox.filesystem.denyWrite | index(\"./project.config\")' .claude/settings.json"
+expect "check.config holds no project values" 1 grep -qE '^(COVERAGE_TOTAL_MIN|VALE_EXCLUDE|ARCH_CMD)=' check.config
+expect "project.config holds the coverage thresholds, VALE_EXCLUDE and the playbook variables" 0 bash -c "grep -q '^COVERAGE_TOTAL_MIN=' project.config && grep -q '^VALE_EXCLUDE=' project.config && grep -q '^ARCH_CMD=' project.config"
+expect "markers: every shared file has a project marker" 0 bash -c "grep -q 'project rules: below this line' AGENTS.md && grep -q 'project rules: below this line' CLAUDE.md && grep -q 'project principles: below this line' CONSTITUTION.md && for f in .guardrails lefthook.yml .gitignore CODEOWNERS; do grep -q '^# project: below this line' \$f || exit 1; done"
+expect "project.config overrides check.config in scripts/check" 0 bash -c "printf 'LINT_CMD=\"echo from-project-config\"\n' >> project.config && out=\$(scripts/check fast 2>&1); git checkout -q project.config; grep -q from-project-config <<<\"\$out\""
+printf 'FORMAT_FILE_CMD="touch {file}.fmt"\n' >> project.config
+echo x > fmt-probe.txt
+hookf() { echo "{\"tool_input\":{\"file_path\":\"$PWD/fmt-probe.txt\"}}" | CLAUDE_PROJECT_DIR=$PWD bash .claude/hooks/format-file.sh; }
+expect "format-file hook reads FORMAT_FILE_CMD from project.config" 0 bash -c "$(declare -f hookf); hookf; test -f fmt-probe.txt.fmt"
+rm -f fmt-probe.txt fmt-probe.txt.fmt; git checkout -q project.config
+printf '2\tdev\tbash\tgit status\n' >> tests/hooks/project-cases.tsv
+expect "hooks: a wrong project case fails scripts/check hooks" 1 scripts/check hooks
+git checkout -q tests/hooks/project-cases.tsv
+printf '2\tchore/TST-9-update-dev-standard\tbash\tgit commit -m "chore(TST-9): update dev-standard to v1.0.0"\n2\tchore/TST-9-other\tbash\tgit commit -m "docs: x"\n' >> tests/hooks/project-cases.tsv
+expect_out "hooks: update_level ai-assist (default): the update branch is not an agent branch" "PASS hooks" scripts/check hooks
+git checkout -q tests/hooks/project-cases.tsv
+cp "$work/agent/tests/hooks/project-cases.tsv" "$work/agent-cases.bak"
+printf '0\tchore/TST-9-update-dev-standard\tbash\tgit commit -m "chore(TST-9): update dev-standard to v1.0.0"\n2\tchore/TST-9-other\tbash\tgit commit -m "docs: x"\n' >> "$work/agent/tests/hooks/project-cases.tsv"
+expect_out "hooks: update_level agentic: the update branch is an agent branch, another chore branch is not" "PASS hooks" bash -c "cd '$work/agent' && scripts/check hooks"
+cp "$work/agent-cases.bak" "$work/agent/tests/hooks/project-cases.tsv"
+git checkout -q tests/hooks/project-cases.tsv
+echo "-- update-standard preconditions"
+expect "update-standard: no issue -> exit 2" 2 scripts/update-standard
+expect "update-standard: a wrong key -> exit 2" 2 scripts/update-standard APP-1
+cp -r . "$work/none-rel" 2>/dev/null
+( cd "$work/none-rel" && sed -i 's|^_src_path: .*|_src_path: ./dev-standard|' .copier-answers.yml
+  expect_out "update-standard: a relative _src_path is named" "is './dev-standard', a relative path" scripts/update-standard TST-1
+  expect_out "update-standard: ... and the fix is given" "set _src_path in .copier-answers.yml to gh:<owner>/dev-standard" scripts/update-standard TST-1
+  expect "update-standard: ... exit 2" 2 scripts/update-standard TST-1 )
+rm -rf "$work/none-rel"
+expect_out "standard-version: reads the source and says so (never fails)" "standard|standard-version" scripts/check standard-version
+expect "standard-version: exit 0" 0 scripts/check standard-version
+)
+
+echo "== release rules of tests/update-tests.sh: a release without upgrade notes fails"
+rr="$work/rr"; rm -rf "$rr"; cp -a "$here" "$rr" 2>/dev/null
+RR() { (cd "$rr" && RELEASE_RULES_ONLY=1 TAG_MAP="v0.1.0=ce35080 v0.2.0=db58a20" tests/update-tests.sh "$work/rr-work"); }
+if git -C "$here" rev-parse -q --verify ce35080 >/dev/null && git -C "$here" rev-parse -q --verify db58a20 >/dev/null; then
+    expect "release rules: the real CHANGELOG passes" 0 RR
+    python3 - "$rr/CHANGELOG.md" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+s = re.sub(r"### Upgrade notes\n.*?(?=\n## v0\.2\.0)", "### Upgrade notes\n\n", s, count=1, flags=re.S)
+open(p, "w").write(s)
+PY
+    expect "release rules: empty Upgrade notes fail" 1 RR
+    (cd "$here" && git show HEAD:CHANGELOG.md > /dev/null 2>&1); cp "$here/CHANGELOG.md" "$rr/CHANGELOG.md"
+    git -C "$rr" mv template/scripts/sync-constitution template/scripts/sync-constitution-renamed 2>/dev/null || mv "$rr/template/scripts/sync-constitution" "$rr/template/scripts/sync-constitution-renamed"
+    expect "release rules: a renamed standard file that the notes do not name fails" 1 RR
+else echo "skip release-rule tests (history without the v0.1.0 and v0.2.0 commits)"; fi
+rm -rf "$rr" "$work/rr-work"
 
 echo "== hooks cases (jq, python3 and sed parsers)"
 (cd py && expect_out "hooks: all parsers" "PASS hooks \([0-9]+ cases x 3 parsers: sed python jq\)" scripts/check hooks)

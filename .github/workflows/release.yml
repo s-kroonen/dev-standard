@@ -1,0 +1,36 @@
+# Release of dev-standard: runs when a person pushes a tag v<x.y.z> on main (docs/releasing.md).
+# Publishes the GitHub release with the CHANGELOG.md section of that version, so a project that
+# updates (scripts/update-standard) finds its upgrade notes there too. The tag is also the version
+# that `copier update` reads.
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write        # create the GitHub release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Release notes from CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          awk -v t="$TAG" '$0 ~ "^## " t "([[:space:]]|$)" {on=1; next} on && /^## / {exit} on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "::error::No CHANGELOG.md section '## $TAG' (docs/releasing.md)."; exit 1; }
+          grep -q '^### Upgrade notes' notes.md || { echo "::error::The section of $TAG has no 'Upgrade notes' (write 'None.' when there is nothing to do)."; exit 1; }
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md

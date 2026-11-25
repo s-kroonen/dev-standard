@@ -1,0 +1,19 @@
+# Git hooks (https://lefthook.dev). Install once per clone: scripts/setup
+# Fast feedback, not enforcement: `git commit --no-verify` skips them; CI (.github/workflows/ci.yml) is the gate.
+
+pre-commit:
+  commands:
+    branch:
+      run: scripts/check branch      # no commits on main/dev; <type>/STD-<n>-<slug>. Override once: ALLOW_BRANCH=1
+    check-fast:
+      run: scripts/check fast
+
+commit-msg:
+  commands:
+    format:
+      run: scripts/check commit-msg {1}
+
+pre-push:
+  commands:
+    docs:
+      run: scripts/check docs

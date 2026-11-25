@@ -25,6 +25,7 @@
 # The checks, their configuration and their exceptions
 ^scripts/
 ^check\.config$
+^project\.config$
 ^lefthook\.yml$
 ^\.gitleaks\.toml$
 ^\.gitleaksignore$
@@ -32,6 +33,8 @@
 ^osv-scanner\.toml$
 ^\.semgrepignore$
 ^\.markdownlint-cli2\.jsonc$
+^\.vale\.ini$
+^\.vale/
 ^\.opengrep/
 ^tests/security-canary/
 ^tests/quality-canary/
@@ -42,6 +45,7 @@
 ^CODEOWNERS$
 ^\.guardrails$
 
+# project: below this line (the standard never edits what follows)
 # Project-specific: linter / analyzer / test configuration (uncomment what applies)
 # ^analysis_options\.yaml$
 # ^(.*/)?eslint\.config\.(m?js|ts)$

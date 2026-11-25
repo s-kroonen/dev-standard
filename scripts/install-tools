@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#
+# Installs the pinned tools into .tools/bin (Linux x86_64): the template's tools (gitleaks, vale,
+# lefthook, ...) through template/scripts/install-tools, plus shellcheck and actionlint.
+#   scripts/install-tools                  everything
+#   scripts/install-tools vale shellcheck actionlint  only the named tools
+# Versions and checksums: check.config (the template's pins are read from template/check.config.jinja).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+source ./check.config
+[[ "$(uname -s)-$(uname -m)" == "Linux-x86_64" ]] || { echo "Linux x86_64 only; use Homebrew or Docker here." >&2; exit 1; }
+
+shellcheck=false; actionlint=false; rest=()
+for t in "$@"; do
+    case "$t" in shellcheck) shellcheck=true ;; actionlint) actionlint=true ;; *) rest+=("$t") ;; esac
+done
+[[ $# -eq 0 ]] && { shellcheck=true; actionlint=true; }
+if [[ $# -eq 0 || ${#rest[@]} -gt 0 ]]; then template/scripts/install-tools "${rest[@]}"; fi
+
+if $shellcheck; then
+    dl="$(mktemp -d)"; trap 'rm -rf "$dl"' EXIT
+    mkdir -p .tools/bin
+    curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" -o "$dl/sc.tar.xz"
+    echo "$SHELLCHECK_SHA256  $dl/sc.tar.xz" | sha256sum -c --quiet - || { echo "Checksum mismatch for shellcheck" >&2; exit 1; }
+    tar -xJf "$dl/sc.tar.xz" -C "$dl"
+    install -m 0755 "$dl/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" .tools/bin/shellcheck
+    printf '%-12s %s\n' shellcheck "$(.tools/bin/shellcheck --version | sed -n 's/^version: //p')"
+fi
+
+if $actionlint; then
+    dl="$(mktemp -d)"; trap 'rm -rf "$dl"' EXIT
+    mkdir -p .tools/bin
+    curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o "$dl/al.tar.gz"
+    echo "$ACTIONLINT_SHA256  $dl/al.tar.gz" | sha256sum -c --quiet - || { echo "Checksum mismatch for actionlint" >&2; exit 1; }
+    tar -xzf "$dl/al.tar.gz" -C "$dl" actionlint
+    install -m 0755 "$dl/actionlint" .tools/bin/actionlint
+    printf '%-12s %s\n' actionlint "$(.tools/bin/actionlint -version | head -n1)"
+fi

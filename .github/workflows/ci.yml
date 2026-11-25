@@ -1,0 +1,218 @@
+# CI of dev-standard itself. Required status checks of the branch rules (scripts/repo-settings):
+# "result" and "guardrails". Waivers are PR labels that a person sets (guardrail-change).
+# The weekly run repeats the template tests and verifies the repository settings.
+name: ci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  push:
+    branches: [main, dev]
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  BASE_REF: ${{ github.base_ref }}
+
+jobs:
+  lint:
+    # Shell scripts, YAML, secrets, and the writing rule on the Markdown of this repository.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: scripts/install-tools gitleaks vale shellcheck actionlint
+      - run: scripts/lint
+      - run: scripts/check secrets
+      - run: scripts/check docs ${BASE_REF:+"origin/$BASE_REF"}
+      - run: scripts/check hooks
+      - run: pipx run zizmor==1.33.1 --offline --min-severity medium .github/workflows/
+
+  render:
+    # A project generated for each variant: the YAML parses, zizmor is clean on its workflows, the
+    # rendered docs pass the writing rule.
+    name: render (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [none, python, node, rust, gitlab, agent]
+    env:
+      VARIANT: ${{ matrix.variant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: scripts/install-tools vale shellcheck actionlint
+      - name: Generate the project
+        run: |
+          case "$VARIANT" in
+            gitlab) extra=(--data stack=none --data platform=gitlab) ;;
+            agent) extra=(--data stack=none --data github_agent=true --data network_api=true --data safety_critical=true) ;;
+            *) extra=(--data "stack=$VARIANT") ;;
+          esac
+          uvx --from copier==9.7.1 copier copy --trust --defaults --vcs-ref HEAD . "$RUNNER_TEMP/p" \
+            --data project_name=P --data issue_key=TST "${extra[@]}"
+      - name: No Jinja left, YAML parses
+        working-directory: ${{ runner.temp }}/p
+        run: |
+          if grep -rEl '\{%|\{\{ *(project|issue|stack|owner)' --exclude-dir=.git --exclude-dir=.specify --exclude-dir=.opengrep --exclude-dir=node_modules . | grep -v '\.github/workflows/' | grep .; then
+            echo "::error::Jinja is left in the files above."
+            exit 1
+          fi
+          mapfile -t yml < <(find . -name '*.yml' -not -path './.git/*' -not -path './.specify/*' -not -path './.opengrep/*')
+          uvx --from pyyaml==6.0.4 python -I -c 'import sys, yaml
+          [yaml.safe_load(open(p, encoding="utf-8")) for p in sys.argv[1:]]' "${yml[@]}"
+      - name: Workflows pass zizmor
+        working-directory: ${{ runner.temp }}/p
+        run: |
+          if [ -d .github/workflows ]; then pipx run zizmor==1.33.1 --offline --min-severity medium .github/workflows/; fi
+      - name: Workflows pass actionlint (shellcheck on every run block)
+        working-directory: ${{ runner.temp }}/p
+        run: |
+          if [ -d .github/workflows ]; then "$GITHUB_WORKSPACE/.tools/bin/actionlint" -shellcheck "$GITHUB_WORKSPACE/.tools/bin/shellcheck" .github/workflows/*.yml; fi
+      - name: Rendered docs pass the writing rule
+        working-directory: ${{ runner.temp }}/p
+        run: |
+          git add -A
+          PATH="$GITHUB_WORKSPACE/.tools/bin:$PATH" scripts/check docs
+
+  template-tests:
+    # tests/template-tests.sh generates projects and runs their stages; the scanners come from the
+    # pinned installer of this repository (scripts/install-tools, as in scripts/setup).
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install the pinned tools (same as scripts/setup)
+        run: scripts/install-tools
+      - run: tests/template-tests.sh "$RUNNER_TEMP/work"
+
+  update-test:
+    # tests/update-tests.sh: projects of the previous release and of v0.1.0 (stack none, python, node)
+    # update to this commit without conflicts, project files stay byte-identical, the checks are green
+    # afterwards; a repository that did not start from the standard is adopted. The release tags
+    # come from the repository; TAG_MAP creates a missing one in the scratch clone only (drop an
+    # entry once its tag is pushed).
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      TAG_MAP: "v0.1.0=ce35080 v0.2.0=db58a20"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install the pinned tools (same as scripts/setup)
+        run: scripts/install-tools
+      - run: tests/update-tests.sh "$RUNNER_TEMP/update-work"
+
+  pr-rules:
+    # Commits and PR title are Conventional Commits with the key STD; the title becomes the squash
+    # commit. The PR body follows the writing rule and carries no AI watermark.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: scripts/install-tools vale
+      - name: PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: scripts/check pr-title "$PR_TITLE"
+      - name: PR text
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: scripts/check pr-text
+      - name: Commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          bad=0
+          for c in $(git rev-list "$BASE..$HEAD"); do
+            git log -1 --format=%B "$c" > "$RUNNER_TEMP/msg"
+            scripts/check commit-msg "$RUNNER_TEMP/msg" || { echo "  in ${c:0:7}"; bad=1; }
+          done
+          exit $bad
+
+  guardrails:
+    # Fails a pull request that changes a guardrail file (.guardrails) unless a maintainer set the
+    # label "guardrail-change". The list comes from the target branch.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'guardrail-change') }}
+        run: |
+          # No list on the base branch (a new or adopting repository): no guardrails yet.
+          if ! git cat-file -e "$BASE:.guardrails" 2>/dev/null; then
+            git show "$HEAD:.guardrails" 2>/dev/null | grep -vE '^[[:space:]]*(#|$)' > "$RUNNER_TEMP/patterns" || true
+            adds="$(git diff --name-only "$BASE...$HEAD" | grep -Ef "$RUNNER_TEMP/patterns" || true)"
+            echo "::notice::The base branch has no .guardrails: there are no guardrail files yet, so nothing is checked."
+            echo "Files that become guardrail files with this PR:"; echo "${adds:-none}"
+            exit 0
+          fi
+          git show "$BASE:.guardrails" | grep -vE '^[[:space:]]*(#|$)' > "$RUNNER_TEMP/patterns" || true
+          hits="$(git diff --name-only "$BASE...$HEAD" | grep -Ef "$RUNNER_TEMP/patterns" || true)"
+          if [ -z "$hits" ]; then echo "No guardrail files changed."; exit 0; fi
+          echo "Guardrail files changed:"; echo "$hits"
+          if [ "$APPROVED" = "true" ]; then echo "Label guardrail-change is set: allowed."; exit 0; fi
+          echo "::error::This PR changes guardrail files. A maintainer reviews them and adds the label 'guardrail-change'."
+          exit 1
+
+  repo-settings:
+    # Weekly: are the branch rules still in place? Non-blocking (reading rulesets can need admin rights).
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: scripts/repo-settings verify | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The one required status check. Skipped jobs count as passed; failed or cancelled ones do not.
+  result:
+    if: always()
+    needs: [lint, render, template-tests, update-test, pr-rules]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          bad=$(echo "$RESULTS" | jq '[to_entries[] | select(.value.result != "success" and .value.result != "skipped")] | length')
+          [ "$bad" -eq 0 ] || { echo "::error::$bad job(s) failed."; exit 1; }

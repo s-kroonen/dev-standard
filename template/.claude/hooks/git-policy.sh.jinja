@@ -8,6 +8,9 @@
 {%- set _ = agentic.append('spike') %}
 #   The agent may create, commit on and push only these branches:
 #     - agentic work types and spikes: {{ agentic | join('/, ') }}/
+{%- if update_level == 'agentic' %}
+#     - standard updates: chore/<KEY>-<n>-update-dev-standard (scripts/update-standard)
+{%- endif %}
 #     - branches made by Claude Code on the web / the Claude GitHub Action (claude/, ccr-): those
 #       sessions are agentic by nature; CI and branch rules gate what they push.
 #   Everything else: the agent leaves changes uncommitted; a person commits.
@@ -16,13 +19,14 @@
 # variable, from a script interpreter) are treated as the real thing. Best effort: CI and branch
 # rules are the binding gate. Exit 2 blocks and tells the agent why.
 
+# shellcheck disable=SC2034  # read by the sourced parse-input.sh
 input="$(cat)"
 # shellcheck source=parse-input.sh
 source "$(dirname "${BASH_SOURCE[0]}")/parse-input.sh" || { echo "Blocked: .claude/hooks/parse-input.sh is missing." >&2; exit 2; }
 cmd="$(hook_command)"
 [[ -z "$cmd" ]] && exit 0
 
-AGENT_BRANCHES='^({{ agentic | join('|') }})/|^claude/|^ccr-'
+AGENT_BRANCHES='^({{ agentic | join('|') }})/|^claude/|^ccr-{% if update_level == 'agentic' %}|^chore/[A-Za-z0-9]+-[0-9]+-update-dev-standard${% endif %}'
 root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 branch="$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
 

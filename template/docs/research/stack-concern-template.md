@@ -31,7 +31,7 @@ What v1 used, what worked, what didn't.
 | Option | <criterion> | … | Weighted total | Reason |
 |---|---|---|---|---|
 
-## Toolability (our gates)
+## Toolability (dev-standard gates)
 
 Profile in dev-standard? Custom security rules? Quality canary? Measured SAST coverage?
 

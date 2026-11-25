@@ -57,6 +57,12 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: scripts/check pr-title "$PR_TITLE"
+      - name: PR text (writing rule, no AI watermark)
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          scripts/install-tools vale
+          scripts/check pr-text
       - name: Commits
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -184,14 +190,18 @@ jobs:
       - run: scripts/check licenses
 
   docs:
-    # markdownlint-cli2 (pinned in check.config) and relative links; no network for the links.
+    # markdownlint-cli2 (pinned in check.config), relative links (no network) and the writing rule
+    # (Vale, docs/process/writing.md). A pull request reads the changed files only; a push and the
+    # weekly run read everything.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - run: scripts/check docs
+      - run: scripts/install-tools vale
+      - run: scripts/check docs ${BASE_REF:+"origin/$BASE_REF"}
 
   workflows:
     # Security lint of the CI definitions themselves (template injection, risky triggers, credentials).
@@ -224,7 +234,7 @@ jobs:
       - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
 
   image:
-    if: hashFiles('Dockerfile', 'docker/Dockerfile', '*/Dockerfile') != ''
+    # hashFiles is not available in a job-level `if`: each step after the checkout carries the condition.
     needs: [fast, test]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -232,13 +242,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: scripts/install-tools
+      - if: hashFiles('Dockerfile', 'docker/Dockerfile', '*/Dockerfile') != ''
+        run: scripts/install-tools
       - name: Build image
+        if: hashFiles('Dockerfile', 'docker/Dockerfile', '*/Dockerfile') != ''
         env:
           DOCKERFILE: ${{ vars.DOCKERFILE }}
           SHA: ${{ github.sha }}
         run: docker build -t "check/image:$SHA" -f "${DOCKERFILE:-Dockerfile}" .
-      - env:
+      - if: hashFiles('Dockerfile', 'docker/Dockerfile', '*/Dockerfile') != ''
+        env:
           SHA: ${{ github.sha }}
         run: scripts/check image "check/image:$SHA"
 
@@ -284,6 +297,18 @@ jobs:
           GH_REPO: ${{ github.repository }}
           ENABLE_CODEQL: ${{ vars.ENABLE_CODEQL }}
         run: scripts/repo-settings verify | tee -a "$GITHUB_STEP_SUMMARY"
+
+  standard-version:
+    # Weekly: is a newer dev-standard out? Prints its upgrade notes. Never fails; an update is a PR
+    # that scripts/update-standard prepares (docs/process/updating.md).
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/check standard-version | tee -a "$GITHUB_STEP_SUMMARY"
 
   # The one required status check. Skipped jobs count as passed; failed or cancelled ones don't.
   result:

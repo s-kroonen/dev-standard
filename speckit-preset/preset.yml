@@ -5,7 +5,7 @@ preset:
   name: "Dev Standard"
   version: "0.2.0"
   description: >-
-    Our standard on top of Spec Kit: the constitution lives in CONSTITUTION.md (works without Spec
+    dev-standard on top of Spec Kit: the constitution lives in CONSTITUTION.md (works without Spec
     Kit too), specs get a Proof table and a Security & Data section, plans get a Guardrails &
     Security gate and a Departures-during-build record.
   author: "dev-standard"

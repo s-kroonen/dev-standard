@@ -1,0 +1,38 @@
+# project.config — the project's own settings for scripts/check, scripts/setup and CI ({{ project_name }}). Sourced by bash.
+# A PROJECT FILE: written once at generation, never touched by `copier update`. It is sourced after
+# check.config, so a value here wins over the standard's value. Overrides: a command of the stack
+# profile (FORMAT_CMD, LINT_CMD, TEST_CMD, ...), STOP_STAGES, thresholds, extra rules.
+# A guardrail file (.guardrails): agents don't change it; humans change it through a reviewed PR.
+
+# --- Coverage ------------------------------------------------------------------------------------
+COVERAGE_CHANGED_MIN=80   # % of changed lines covered by tests
+COVERAGE_TOTAL_MIN=0      # raise it to the current total once code exists (playbook step 12); never lower it
+
+# --- Writing rule ------------------------------------------------------------------------------------
+# Vale (docs/process/writing.md): a path regex for content in another language or vendored text that
+# the prose rules skip. Markdown and source comments are linted otherwise; see .vale.ini.
+VALE_EXCLUDE=""
+
+# >>> stack layer playbook (docs/process/stack-layer.md; skill /stack-layer)
+# After the stack decision and again as the code grows, each variable is decided: a command, or
+# "none" with a reason comment on the same line, e.g.  E2E_CMD="none"   # no UI.
+# Empty = undecided: `scripts/check stack-layer` warns locally and FAILS in CI once code exists.
+# architecture boundaries (import-linter, dependency-cruiser, cargo-modules, NetArchTest, ...)
+ARCH_CMD=""
+# complexity and duplication (ruff C90, eslint complexity + jscpd, clippy, CA1502, ...)
+COMPLEXITY_CMD=""
+# performance budgets from the quality attributes (pytest-benchmark, vitest bench, criterion, ...)
+PERF_CMD=""
+# UI: Playwright incl. accessibility (axe) and a bundle-size budget
+E2E_CMD=""
+# contracts between parts: OpenAPI / AsyncAPI diff + schema-based tests
+CONTRACT_CMD=""
+# the language's own security tools (pip-audit, npm audit signatures, cargo-deny, ...)
+SECURITY_NATIVE_CMD=""
+# fuzz parsers of untrusted input; use ${FUZZ_SECONDS:-30} (CI sets 600 in the weekly run)
+FUZZ_CMD=""
+# scan of the running app (ZAP baseline), when it serves HTTP
+DAST_CMD=""
+# <<< stack layer playbook
+
+# --- Further overrides ----------------------------------------------------------------------------

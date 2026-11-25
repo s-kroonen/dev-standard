@@ -1,0 +1,21 @@
+// markdownlint-cli2 for dev-standard (a guardrail file): the template's rules, plus its own ignores.
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD024": { "siblings_only": true },
+    "MD033": false,
+    "MD036": false,
+    "MD041": false,
+    "MD060": false
+  },
+  "globs": ["*.md", "template/**/*.md", "stacks/**/*.md"],
+  "ignores": [
+    "**/node_modules/**",
+    "template/tests/**",
+    "speckit-preset/**",
+    "template/.vale/**",
+    "template/CHANGELOG.md"
+  ],
+  "gitignore": true
+}

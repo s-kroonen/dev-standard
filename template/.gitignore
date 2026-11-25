@@ -36,3 +36,5 @@ __pycache__/
 !.vscode/extensions.json
 
 # Python tooling created by uvx is outside the repo; nothing else needed at day 0
+
+# project: below this line (the standard never edits what follows)

@@ -10,7 +10,7 @@
 #   scripts/next-version            prints e.g. 0.4.0
 #   scripts/next-version --notes    prints the changelog section for that version (Markdown)
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 last="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)"
 # A newer release tag that this branch doesn't contain means main wasn't merged back: stop, or the
@@ -34,7 +34,7 @@ while IFS= read -r s; do
     t="${BASH_REMATCH[1]}"; bang="${BASH_REMATCH[3]:-}"
     if [[ -n "$bang" ]]; then bump=major; break; fi
     if [[ "$t" == feat ]]; then bump=minor
-    elif [[ "$t" =~ ^(fix|perf)$ && -z "$bump" ]]; then bump=patch; fi
+    elif [[ "$t" =~ ^(fix|perf)$ && -z "$bump" ]]; then bump="patch"; fi
 done <<<"$subjects"
 grep -qE '^BREAKING[ -]CHANGE:' <<<"$bodies" && bump=major
 

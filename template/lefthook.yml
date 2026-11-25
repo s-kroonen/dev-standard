@@ -20,3 +20,5 @@ pre-push:
   commands:
     tests:
       run: scripts/check test
+
+# project: below this line (the standard never edits what follows)

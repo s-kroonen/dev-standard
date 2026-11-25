@@ -38,7 +38,7 @@
 
 [Gates determined based on constitution file]
 
-## Guardrails & Security Check *(added by the dev-standard preset)*
+## Guardrails & Security Check *(dev-standard preset)*
 
 *GATE: pass before implementation; re-check before marking the plan done.*
 
@@ -118,7 +118,7 @@ directories captured above]
 | [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
 | [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
 
-## Departures during build *(added by the dev-standard preset)*
+## Departures during build *(dev-standard preset)*
 
 <!--
   Filled in during implementation: every place where the build left this plan, with the reason and

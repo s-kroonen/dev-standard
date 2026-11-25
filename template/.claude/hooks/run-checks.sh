@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Claude Code Stop hook: when the agent ends a turn with changed files, run the stages of STOP_STAGES
-# (check.config; default: fast, test, build). A failure blocks the stop (exit 2) and the output goes
+# (check.config, project.config; default: fast, test, build). A failure blocks the stop (exit 2) and the output goes
 # back to the agent to fix. The build stage does nothing while BUILD_CMD is "none" or empty.
 # Docs-only changes (*.md) are skipped. After 3 failed runs in a row the agent may stop, so a check
 # it cannot fix doesn't keep it looping; the failure is then reported to the human.
@@ -16,7 +16,7 @@ fingerprint="$( { git diff HEAD -- . ':!*.md'
 
 [[ -f "$state_dir/passed" && "$(cat "$state_dir/passed")" == "$fingerprint" ]] && exit 0
 
-stages="$(bash -c 'source ./check.config 2>/dev/null; echo "${STOP_STAGES:-fast test}"')"
+stages="$(bash -c 'source ./check.config 2>/dev/null; [[ -f project.config ]] && source ./project.config 2>/dev/null; echo "${STOP_STAGES:-fast test}"')"
 output=""; ok=true
 for stage in $stages; do
     [[ "$stage" =~ ^[a-z][a-z-]*$ ]] || continue

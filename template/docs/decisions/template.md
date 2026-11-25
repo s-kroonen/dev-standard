@@ -7,7 +7,7 @@
 
 ## Context and problem
 
-<What forces this decision? What happens if we don't decide?>
+<What forces this decision? What happens when nobody decides?>
 
 ## Decision drivers
 
@@ -46,5 +46,5 @@ Links to files that exist; `scripts/check research` needs at least one before th
 ## Consequences
 
 - Good: <…>
-- Bad, and how we live with it: <…>
+- Bad, and how it is handled: <…>
 - Follow-up: <issues to create>

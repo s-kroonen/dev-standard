@@ -21,7 +21,7 @@
 # squash title = MR title, source branch deleted, the same labels. Approvals and Code Owner
 # approval are Premium features and are not set.
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 platform=github; args=()
 for a in "$@"; do if [[ "$a" == --gitlab ]]; then platform=gitlab; else args+=("$a"); fi; done

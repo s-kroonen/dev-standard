@@ -3,8 +3,10 @@
 # Prepares a clone for development and for AI agents: git hooks, security tools, rule sets and the
 # project's dependencies. Safe to run again. Cloud agent sessions run it from the SessionStart hook.
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 source ./check.config
+# shellcheck source=/dev/null
+[[ -f project.config ]] && source ./project.config
 
 if [[ "$(uname -s)-$(uname -m)" == "Linux-x86_64" ]]; then scripts/install-tools; fi
 export PATH="$PWD/.tools/bin:$PATH"
