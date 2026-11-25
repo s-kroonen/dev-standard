@@ -1,159 +1,145 @@
-# PLAN — writing rule with Vale, central AI attribution, checks on the standard itself
+# PLAN — clean updates from dev-standard to projects
 
-The previous plan (stack-layer playbook, research guardrails, process, security) is built; its
-results are in `TODO.md` (STD-8 to STD-80) and in git history.
+The previous plans (stack-layer playbook, research, process, security, writing rule, AI
+attribution, checks on this repository) are built; their results are in `TODO.md` and in git
+history.
 
-Three changes, one build:
+Goal: a new dev-standard version reaches a project with one command, without merge conflicts in a
+project that only edits its own parts, with written upgrade notes for anything manual, and with a
+CI test in this repository that proves it for every release.
 
-- **A. Writing rule**, enforced with Vale (replaces STD-76's open half).
-- **B. Central AI attribution**: no watermarks per commit, PR or doc; the role of AI is described
-  once, in `AGENTS.md` and the README.
-- **C. The standard checks itself**: dev-standard gets its own CI, rules and tests, so a local
-  clone with `gh` can set up the GitHub side and everything is verified on this repository.
+Findings from the first update test (v0.1.0 → v0.2.0, python project with local edits):
 
-New `TODO.md` rows start at STD-81.
+- The three-way merge kept local edits in `AGENTS.md` and `README.md`; 39 files updated, 4 added,
+  no conflicts.
+- The synced constitution copy was stale after the update: `check fast` failed until
+  `scripts/sync-constitution` ran.
+- A project generated from a relative path (`./dev-standard`) stores that path in
+  `.copier-answers.yml`; `copier update` then stops with "Updating is only supported in
+  git-tracked templates".
+
+New `TODO.md` rows are added as `STD-?` (a person numbers them).
 
 ## Rules for the build
 
-- Edit only files in this repository. Test in a scratch directory with generated projects
-  (`uvx --from copier==9.7.1 copier copy --trust --defaults --vcs-ref HEAD <this repo> <dir> --data stack=<none|python|node|rust> ...`)
-  and with `tests/template-tests.sh`.
-- No commits. Pin only versions that were looked up (release page + checksum; action SHAs with
-  `git ls-remote`); prefer releases at least 14 days old.
-- Every new check gets a failing and a passing case in `tests/template-tests.sh`; hook rules get
-  rows in `template/tests/hooks/cases.tsv`.
-- Day 0 stays green: a fresh `stack=none` project passes `scripts/check all`, also with `CI=1`.
-- All text written in this build follows the writing rule below.
+The rules of `AGENTS.md` hold. In short: edit only this repository, no commits, look up every
+pinned version, a failing and a passing test per new check, day 0 stays green (also with
+`CI=1`), the writing rule applies to all text, guardrail files change only with a note for the
+owner in the handover.
 
-## A. Writing rule, enforced with Vale
+## A. File ownership: the base for conflict-free updates
 
-### A1. The rule (goes into `template/docs/process/writing.md`, summarised in `AGENTS.md`)
+1. Three classes of files in a generated project, listed in
+   `template/docs/process/updating.md` and in the README:
+   - **Standard files**: replaced by every update, guardrails, never edited in the project
+     (`scripts/`, `.claude/hooks/`, the workflows, `.vale/styles/DevStandard/`, the canaries,
+     `tests/hooks/cases.tsv`, `.opengrep/rules/custom/`).
+   - **Project files**: written once at generation, never touched by an update. Listed in
+     `copier.yml` under `_skip_if_exists` (verify the behaviour on update): `README.md`,
+     `CHANGELOG.md`, `TODO.md`, `docs/product/`, `docs/decisions/0002-*`, `docs/research/` notes,
+     `project.config`, the project extension points below.
+   - **Shared files**: merged by Copier (`AGENTS.md`, `CLAUDE.md`, `CONSTITUTION.md`,
+     `.guardrails`, `lefthook.yml`, `.gitignore`). Each ends with one marked project section
+     (`<!-- project rules: below this line -->` or `# project: below this line`); the standard
+     never edits below the marker, so merges stay clean.
+2. Split `check.config`:
+   - `check.config`: standard file (rules, pinned tools, stack profile defaults); replaced by
+     updates;
+   - `project.config`: project file, sourced after `check.config` by `scripts/check`,
+     `scripts/setup` and the hooks; holds the project's overrides (commands, coverage
+     thresholds, playbook variables `ARCH_CMD` …, `VALE_EXCLUDE`, extra rules). A guardrail like
+     `check.config`.
+   - A Copier migration moves the values of the old `# >>> project` section into
+     `project.config` for projects generated before this change (verify how `_migrations` with a
+     version runs).
+3. Project extension points that updates never touch: `.opengrep/rules/project/`,
+   `.vale/styles/Project/` and its vocabulary, `tests/hooks/project-cases.tsv` (run by
+   `scripts/check hooks` after the standard cases).
 
-Applies to docs, code comments, changelog entries, TODO items, PR/MR text, handovers.
+## B. One update command in every project
 
-1. <!-- vale off -->No first or second person: no we, our, us, I, my, you, your. Name the thing: "dev-standard
-   adds…", "The hook blocks…".
-2. Describe what exists, in the present tense: "The `deps` stage fails on…".
-3. Steps use the imperative without "you": "Run `scripts/setup`."
-4. No history in docs or comments: no "now", "new", "no longer", "previously", "updated to",
-   "added by". History lives in git and `CHANGELOG.md`.
-5. Comments explain why, not what. No commented-out code. A TODO in code carries an issue key:
-   `TODO(KEY-12): …`.
-6. No filler or marketing: simply, just, easily, robust, seamless, powerful, comprehensive,
-   leverage, "note that", "it's worth noting"; no emojis, no exclamation marks.
-7. No hedging: "should work", "hopefully". State what is verified and what is not.
-8. Changelog entries describe the product change: "Fixture groups can be renamed".
-9. TODO item titles state the problem or the outcome: "Pan overshoots at the end of a cue".
-10. No AI watermarks in any text (see B).
-11. Commit subjects stay imperative Conventional Commits (`fix(KEY-31): stop pan overshoot`);
-    Vale does not check commit subjects.
-12. Text in another language (domain data) is out of scope; its paths are excluded. <!-- vale on -->
+`scripts/update-standard <KEY-n> [--to vX.Y.Z]` (standard file, guardrail):
 
-### A2. Vale in the template
+1. Preconditions: clean working tree; refuses on `main`; creates
+   `chore/<KEY-n>-update-dev-standard` from `dev`.
+2. Reads `_src_path` and `_commit` from `.copier-answers.yml`. A relative or unreachable source
+   stops with the fix (set `_src_path` to `gh:<owner>/dev-standard`).
+3. Runs the pinned Copier (`COPIER_VERSION` in `check.config`):
+   `copier update --trust --defaults --conflict inline --vcs-ref <tag>` (latest tag by default).
+4. Post-steps: `scripts/sync-constitution`; the Spec Kit preset again when `speckit-preset/`
+   changed between the two tags; `scripts/setup` (new pinned tools); `scripts/update-rules` when
+   `OPENGREP_RULES_COMMIT` changed.
+5. Report: the upgrade notes from the standard's `CHANGELOG.md` between the two tags, files with
+   conflict markers, changed guardrail files (the PR needs `guardrail-change`), whether
+   `scripts/repo-settings apply` is needed (labels or required checks changed), the result of
+   `scripts/check fast`, and the commit message
+   `chore(<KEY-n>): update dev-standard to vX.Y.Z`.
+6. Plain `copier update` also stays correct: a Copier task or migration runs
+   `scripts/sync-constitution` after the merge (test which one runs after the files are
+   written).
+7. Skill `/update-standard` for agents: runs the script, resolves conflicts only inside project
+   sections, never edits standard files, writes the handover with the report.
+8. Work type in `AGENTS.md.jinja`: "Standard update", commit type `chore`, branch
+   `chore/<KEY-n>-update-dev-standard`, level from a new Copier question `update_level`
+   (default `agentic`: the update is mechanical and the PR review is the gate).
 
-1. Pin Vale (latest release ≥ 14 days old) in `check.config.jinja` (`VALE_VERSION`,
-   `VALE_SHA256`) and install it in `scripts/install-tools`; macOS/Windows notes like the other
-   tools.
-2. `.vale.ini` + `.vale/styles/DevStandard/*.yml`, shipped in the template, offline (no
-   `vale sync`, no third-party packages by default; document how to add write-good or proselint
-   vendored at a pinned version). Rules:
-   - <!-- vale off -->**error**: `Pronouns` (A1.1), `History` (A1.4), `Filler` (A1.6), `Hedging` (A1.7),
-     `Watermarks` (B: "Co-Authored-By: Claude", "Generated with Claude Code", "🤖", session
-     links), `TodoKey` (A1.5, comments: `TODO` without `(KEY-n)`), `Exclamation`; <!-- vale on -->
-   - <!-- vale off -->**warning**: `SentenceLength` (> 30 words), `Passive` (simple existence pattern),
-     `HeadingCase` (sentence case), `Substitutions` (utilize→use, in order to→to, …); <!-- vale on -->
-   - `config/vocabularies/DevStandard/accept.txt` with project terms (Spec Kit, Copier, lefthook,
-     opengrep, gitleaks, trivy, …); the project adds its own.
-3. Scope in `.vale.ini`: Markdown (`*.md`), source comments for the languages Vale supports
-   (check which: Python, JS/TS, Rust, C#, Go; Dart and shell comments only if supported,
-   otherwise say so in `writing.md`); exclude `tests/*-canary/`, `spikes/`, `.specify/`,
-   `node_modules/`, vendored rules, and a `VALE_EXCLUDE` list from `check.config` for
-   other-language content.
-4. `scripts/check docs`: runs Vale (errors fail, warnings are printed); with a base branch
-   (`scripts/check docs [base]`, used in CI) only changed files; `scripts/check pr-text` reads the
-   PR/MR body from `PR_BODY` (env) and runs Vale on it (`--ext=.md`). Keep the existing
-   markdownlint and link checks in `docs`.
-5. CI: GitHub `checks.yml` and GitLab run `docs` on changed files and `pr-text` on the PR body
-   (passed through `env`, never interpolated into the script — zizmor must stay clean).
-6. Agent feedback (STD-76): PostToolUse hook `lint-file.sh` (or extend `format-file.sh`) runs
-   `LINT_FILE_CMD` (per profile: `ruff check {file}`, `npx eslint {file}`, `cargo clippy` is
-   crate-wide so skip for rust, …) and Vale on edited `.md` files; problems go to stderr with
-   exit 2 so the agent sees them; never blocks the edit itself.
-7. <!-- vale off -->Sweep: every Markdown and `.md.jinja` file in the template, the preset, `stacks/`, and this
-   repository's own `README.md`, `TODO.md` and `PLAN.md` passes the error rules (render the
-   `.jinja` docs in a generated project to lint them; the standard's own CI does the same).
-   Includes "how we work" in `AGENTS.md`, "what we value" in the constitution, every "you" in the
-   README and skills. <!-- vale on -->
-8. `AGENTS.md` hard rule "Writing" (short, links `docs/process/writing.md`); one line in
-   `CLAUDE.md`; handover and PR/MR templates written in the same style.
+## C. Notice of a new version
 
-## B. Central AI attribution instead of watermarks
+`scripts/check standard-version` (weekly CI job, never blocks): compares `_commit` with the
+newest `v*` tag of `_src_path` (`git ls-remote --tags`) and prints the versions in between with
+their upgrade notes. Follow-up row (not in this build): a weekly workflow that runs the update and
+opens a PR labelled `agent`.
 
-1. `template/.claude/settings.json`: `"attribution": {"commit": "", "pr": "", "sessionUrl": false}`
-   (Claude Code setting; `includeCoAuthoredBy` is deprecated).
-2. Constitution V (template and preset), `AGENTS.md` rule "Transparency", README "How AI is
-   used": the role of AI per work type is described once, there. No `Co-Authored-By`, session
-   links or "generated with" lines in commits, PRs, code or docs.
-3. Agent work stays traceable without watermarks: agent branches (`claude/`, `ccr-`, the
-   agentic work types), the PR label `agent` (set by the agent workflow and by agents that open
-   PRs: `gh pr create --label agent`), and the bot author of Action commits.
-4. PR/MR templates: drop the "AI use" checkboxes; keep the agent review checklist, titled "PRs
-   labelled `agent`".
-5. <!-- vale off -->`scripts/check commit-msg` fails on watermark trailers (`Co-Authored-By:` naming an AI tool,
-   `Claude-Session:`, "Generated with …"); pattern `WATERMARK_PATTERN` in `check.config`. The PR
-   title/body checks apply the same pattern. <!-- vale on -->
-6. `claude-agent.yml`: PRs it opens get the label `agent`; allowed tools include
-   `gh pr create`, `gh pr edit --add-label agent`.
-7. `TODO.md` STD-60 text: remove the Co-Authored-By detection idea.
+## D. Releasing dev-standard
 
-## C. The standard checks itself
+1. Root `CHANGELOG.md`, one section per version: Added, Changed, Fixed, **Upgrade notes**
+   (manual steps, renamed or removed files and variables, new labels, new required checks, new
+   tools). Sections for v0.1.0 and v0.2.0 written from git history.
+2. Semver for the standard: a renamed or removed standard file or variable, a new required check,
+   or a new manual step is breaking (major, minor while 0.x). Each breaking change ships a Copier
+   migration or an upgrade note; `tests/update-tests.sh` fails when a release has neither.
+3. Release workflow for this repository on tag `v*`: GitHub release with the `CHANGELOG.md`
+   section (same pattern as the template's `release.yml`).
+4. `docs/releasing.md` (or a README section): version from `scripts/next-version`, changelog with
+   upgrade notes, tag by a person, release.
+5. `_min_copier_version` in `copier.yml`.
 
-dev-standard follows its own standard where it applies: issue key `STD`, tracker `TODO.md`,
-Conventional Commits (`feat(STD-81): …`), writing rule, guardrails.
+## E. Update test in CI (the guarantee)
 
-1. Root `AGENTS.md` + `CLAUDE.md` for this repository: what it is, layout (`template/`,
-   `speckit-preset/`, `stacks/`, `tests/`), how to change and test it, work types (features
-   ai-assist; fixes and releases agentic), the writing rule, never weaken a test or check.
-2. Root `lefthook.yml` + `scripts/` (thin wrappers or symlinks to the template's commit-msg and
-   branch checks, with `ISSUE_KEY=STD`) so commits here follow the same rules.
-3. Root `.guardrails` + `.claude/` (hooks from the template, settings with `attribution` empty,
-   sandbox) so an agent working on the standard is constrained the same way; hook cases run in
-   CI.
-4. `.github/workflows/ci.yml` for this repository (actions pinned by SHA,
-   `persist-credentials: false`, minimal permissions):
-   - `lint`: `bash -n` + shellcheck (pinned) on every script in `template/scripts`,
-     `template/.claude/hooks`, `tests/`; YAML parse of every workflow and GitLab file;
-     gitleaks on the repository; Vale + markdownlint on this repository's docs;
-   - `render`: generate `none`, `python`, `node`, `rust` (+ gitlab, + `github_agent`) projects;
-     zizmor 1.33.1 on the rendered workflows; Vale on the rendered docs;
-   - `template-tests`: `tests/template-tests.sh` (installs the pinned scanners via a generated
-     project's `scripts/install-tools`);
-   - `pr-rules`: PR title and commit messages (`ISSUE_KEY=STD`), PR body via `pr-text`;
-   - `result`: the one required check (same pattern as the template), plus a `guardrails` job,
-     so `template/scripts/repo-settings apply` works on this repository unchanged
-     (`GH_REPO=s-kroonen/dev-standard`).
-   - weekly schedule: template tests + `repo-settings verify`.
-5. `.github/dependabot.yml` for this repository's actions (cool-down 14 days).
-6. Root README section "Working on dev-standard": clone, `scripts/setup`, run the tests,
-   `scripts/repo-settings apply` once (needs `gh` with admin rights), release by tag `v<x.y.z>`
-   (`copier update` uses the tags).
+`tests/update-tests.sh`, a `ci.yml` job `update-test`:
 
-## D. Tests (in `tests/template-tests.sh` and the repository CI)
+1. In a scratch clone: tag the previous release (or the base given), commit the working tree as a
+   temporary release candidate tag.
+2. For `stack` none, python and node: generate from the previous release, commit, apply a set of
+   typical project edits (project sections of the shared files, `project.config`, own README,
+   TODO items, a decision record, a project opengrep rule, a project Vale term).
+3. Run `scripts/update-standard` to the candidate.
+4. Assert: no conflict markers; project files byte-identical; project sections kept; constitution
+   in sync; `_commit` updated; `scripts/check all` green on day 0 (also `CI=1`).
+5. A second run from v0.1.0 (the oldest supported version) to the candidate, with the migration
+   for `project.config`.
 
-- A planted doc with each error rule fails `docs`; the fixed doc passes; `<!-- vale off -->`
-  works; a warning-only doc passes with output.
-- <!-- vale off -->A Python (and TS) comment with "we" fails when Vale supports that language. <!-- vale on -->
-- <!-- vale off -->`pr-text` fails on a body with "you" or a watermark, passes a clean body. <!-- vale on -->
-- <!-- vale off -->`commit-msg` rejects a `Co-Authored-By: Claude…` trailer and a `Claude-Session:` line, accepts
-  a plain message. <!-- vale on -->
-- Generated `settings.json` contains the empty `attribution`.
-- The lint-file hook reports a Vale error for an edited Markdown file (exit 2 + stderr) and
-  stays silent on a clean file.
-- Day-0 `scripts/check all` green locally and with `CI=1`; node, python, rust projects green.
-- The repository's own checks (C4 lint and render jobs) run locally and pass.
+## F. Adopting a repository that did not start from the standard
 
-## E. Finish
+1. `docs/adopting.md` in this repository: run `copier copy --trust gh:<owner>/dev-standard .` on a
+   new branch; project files that exist are kept (`_skip_if_exists`); existing CI files stay
+   next to the standard's; a list of what to merge by hand (existing CI, lint configs, README
+   sections, branch names, commit history that breaks the commit rule).
+2. A test in `tests/update-tests.sh`: adopt into a sample repository with a README, a CI file
+   and a `package.json`; assert the README and CI file are untouched and `scripts/check fast`
+   runs.
 
-- `TODO.md`: rows STD-81 onwards for A, B, C (status per row), STD-76 updated; next free number.
-- `README.md`: what a project gets (writing rule, Vale, attribution), Verified section.
-- Report: built, tested (commands + results), not verified, deviations from this plan.
+## G. Docs
+
+1. Template: `docs/process/updating.md` (ownership classes, the update command, conflicts,
+   labels), a line in `AGENTS.md.jinja` commands and work types, a short README section.
+2. This repository's README: "Updating a project", "Adopting an existing repository",
+   "Releasing dev-standard"; generation examples use `gh:<owner>/dev-standard`, never a local
+   path.
+3. `TODO.md`: the `STD-?` rows of this plan with status; README "Verified".
+
+## H. Finish
+
+Run `tests/template-tests.sh` and `tests/update-tests.sh`, `scripts/lint`, `scripts/check docs`,
+zizmor on every workflow. Report what was built, the test results, what is not verified, and the
+deviations from this plan.
