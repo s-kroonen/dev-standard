@@ -88,7 +88,7 @@ uvx --from copier==9.7.1 copier copy --trust --defaults \
 | `project_name`, `project_slug`, `description` | text | — |
 | `issue_key` | 2–10 capitals, e.g. `APP` | — |
 | `tracker` | `todo`, `github`, `jira` | `todo` |
-| `feature_level` / `bug_level` / `release_level` / `update_level` | `ai-assist`, `agentic` | ai-assist / agentic / agentic / agentic |
+| `feature_level` / `bug_level` / `release_level` / `update_level` | `ai-assist`, `agentic` | ai-assist / agentic / agentic / ai-assist |
 | `platform` | `github`, `gitlab`, `none` | `github` |
 | `use_speckit` | yes / no | yes |
 | `speckit_version` | pinned version | `1.4.4` |
@@ -122,7 +122,7 @@ Conventional Commits (`feat(STD-81): …`), the writing rule, guardrails (`.guar
 
 ```bash
 git clone https://github.com/s-kroonen/dev-standard && cd dev-standard
-scripts/setup                          # git hooks, gitleaks, vale, lefthook, shellcheck into .tools/bin
+scripts/setup                          # git hooks and every pinned tool into .tools/bin (checks and test scanners)
 scripts/lint                           # bash -n, shellcheck, YAML parse
 scripts/check docs                     # markdownlint, links, Vale on README, TODO, preset, stacks, template docs
 tests/template-tests.sh /tmp/work      # generated projects: stages pass and fail where expected

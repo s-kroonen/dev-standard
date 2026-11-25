@@ -3,7 +3,8 @@
 # Prepares a clone of dev-standard: git hooks and the tools the checks need. Safe to run again.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-if [[ "$(uname -s)-$(uname -m)" == "Linux-x86_64" ]]; then scripts/install-tools gitleaks vale lefthook shellcheck; fi
+# Every pinned tool: the checks of this repository and the scanners that tests/*.sh run in generated projects.
+if [[ "$(uname -s)-$(uname -m)" == "Linux-x86_64" ]]; then scripts/install-tools; fi
 export PATH="$PWD/.tools/bin:$PATH"
 if command -v lefthook >/dev/null 2>&1; then lefthook install
 else echo "WARNING: lefthook not found, git hooks NOT installed (macOS: brew install lefthook; Windows: winget install evilmartians.lefthook)." >&2; fi

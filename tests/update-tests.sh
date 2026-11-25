@@ -26,6 +26,7 @@
 # committed in a scratch clone and tagged with it there, so this repository stays untouched.
 set -uo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$here/.tools/bin:$PATH"   # pinned tools from scripts/setup (same as CI)
 work="${1:-$(mktemp -d)}"; mkdir -p "$work"; work="$(cd "$work" && pwd)"; cd "$work" || exit 1
 res="$work/results.txt"; : > "$res"
 strip() { sed 's/\x1b\[[0-9;]*m//g'; }

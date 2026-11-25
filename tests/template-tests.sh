@@ -10,7 +10,9 @@
 # osv.dev is not needed: the malicious-package gate is tested with a stub osv-scanner.
 set -uo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$here/.tools/bin:$PATH"   # pinned tools from scripts/setup (same as CI)
 work="${1:-$(mktemp -d)}"; mkdir -p "$work"; cd "$work" || exit 1
+work="$PWD"
 res="$work/results.txt"; : > "$res"
 strip() { sed 's/\x1b\[[0-9;]*m//g'; }
 G() { git -c user.name=t -c user.email=t@t "$@"; }
@@ -120,7 +122,7 @@ expect_out "install-tools vale installs the pinned version" "vale +vale version 
 )
 
 echo "== agent workflow and CI files of generated projects"
-gen agent none --data github_agent=true --data network_api=true --data safety_critical=true
+gen agent none --data github_agent=true --data network_api=true --data safety_critical=true --data update_level=agentic
 gen gl none --data platform=gitlab
 (
 cd agent || exit 1
@@ -358,8 +360,13 @@ rm -f fmt-probe.txt fmt-probe.txt.fmt; git checkout -q project.config
 printf '2\tdev\tbash\tgit status\n' >> tests/hooks/project-cases.tsv
 expect "hooks: a wrong project case fails scripts/check hooks" 1 scripts/check hooks
 git checkout -q tests/hooks/project-cases.tsv
-printf '0\tchore/TST-9-update-dev-standard\tbash\tgit commit -m "chore(TST-9): update dev-standard to v1.0.0"\n2\tchore/TST-9-other\tbash\tgit commit -m "docs: x"\n' >> tests/hooks/project-cases.tsv
-expect_out "hooks: the update branch is an agent branch, another chore branch is not" "PASS hooks" scripts/check hooks
+printf '2\tchore/TST-9-update-dev-standard\tbash\tgit commit -m "chore(TST-9): update dev-standard to v1.0.0"\n2\tchore/TST-9-other\tbash\tgit commit -m "docs: x"\n' >> tests/hooks/project-cases.tsv
+expect_out "hooks: update_level ai-assist (default): the update branch is not an agent branch" "PASS hooks" scripts/check hooks
+git checkout -q tests/hooks/project-cases.tsv
+cp "$work/agent/tests/hooks/project-cases.tsv" "$work/agent-cases.bak"
+printf '0\tchore/TST-9-update-dev-standard\tbash\tgit commit -m "chore(TST-9): update dev-standard to v1.0.0"\n2\tchore/TST-9-other\tbash\tgit commit -m "docs: x"\n' >> "$work/agent/tests/hooks/project-cases.tsv"
+expect_out "hooks: update_level agentic: the update branch is an agent branch, another chore branch is not" "PASS hooks" bash -c "cd '$work/agent' && scripts/check hooks"
+cp "$work/agent-cases.bak" "$work/agent/tests/hooks/project-cases.tsv"
 git checkout -q tests/hooks/project-cases.tsv
 echo "-- update-standard preconditions"
 expect "update-standard: no issue -> exit 2" 2 scripts/update-standard

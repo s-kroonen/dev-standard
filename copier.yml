@@ -72,7 +72,7 @@ update_level:
   type: str
   help: AI level for standard updates (scripts/update-standard; the update is mechanical, the PR review is the gate)
   choices: [ai-assist, agentic]
-  default: agentic
+  default: ai-assist
 
 platform:
   type: str

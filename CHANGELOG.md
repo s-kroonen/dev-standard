@@ -56,7 +56,7 @@ each breaking change ships a Copier migration or an upgrade note.
   marker.
 - New guardrail files: `project.config` (also in `CODEOWNERS` and the sandbox `denyWrite` list of
   `.claude/settings.json`). Run `scripts/check hooks` after the update.
-- New Copier question `update_level` (default `agentic`) and the branch pattern
+- New Copier question `update_level` (default `ai-assist`: an update rewrites guardrail files, so a person runs `scripts/update-standard`) and the branch pattern
   `chore/<KEY>-<n>-update-dev-standard` for agents.
 - If `_src_path` in `.copier-answers.yml` is a relative path, set it to `gh:<owner>/dev-standard`
   before updating.
