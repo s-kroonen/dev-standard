@@ -109,12 +109,9 @@ jobs:
     # tests/update-tests.sh: projects of the previous release and of v0.1.0 (stack none, python, node)
     # update to this commit without conflicts, project files stay byte-identical, the checks are green
     # afterwards; a repository that did not start from the standard is adopted. The release tags
-    # come from the repository; TAG_MAP creates a missing one in the scratch clone only (drop an
-    # entry once its tag is pushed).
+    # come from the repository (checkout fetches them).
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    env:
-      TAG_MAP: "v0.1.0=ce35080 v0.2.0=db58a20"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
